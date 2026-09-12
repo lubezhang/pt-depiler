@@ -1,8 +1,8 @@
 /**
  * Tauri 迁移：Cloudflare 拦截重试已由 Rust ptd_fetch 统一处理（521/522/523/403 重试）。
- * 保留 isCloudflareBlocked 供 site schemas 做业务层判断；setup 改为 no-op 供原调用方兼容。
+ * 保留 isCloudflareBlocked 供 site schemas 做业务层判断。
  */
-import type { AxiosInstance, AxiosResponse } from "axios";
+import type { AxiosResponse } from "axios";
 
 const cloudflareBlocked5xxCodes = [
   521, // used by cloudflare to signal the original webserver is refusing the connection
@@ -49,14 +49,4 @@ export function isCloudflareBlocked(response: AxiosResponse): boolean {
   }
 
   return false;
-}
-
-interface AxiosRetryWhenCloudflareBlockInstance extends AxiosInstance {
-  defaults: AxiosInstance["defaults"] & {
-    retryWhenCloudflare: boolean;
-  };
-}
-
-export function setupRetryWhenCloudflareBlock(axios: AxiosInstance): AxiosRetryWhenCloudflareBlockInstance {
-  return axios as AxiosRetryWhenCloudflareBlockInstance;
 }

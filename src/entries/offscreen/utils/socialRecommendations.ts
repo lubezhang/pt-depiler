@@ -4,11 +4,8 @@ import { getSocialRecommendations } from "@ptd/social";
 import type { ISocialRecommendationItem } from "@ptd/social";
 
 import { onMessage } from "@/messages.ts";
-import { setupReplaceUnsafeHeader } from "~/extends/axios/replaceUnsafeHeader.ts";
 import { logger } from "./logger.ts";
 import { getSocialInformation } from "./socialInformation.ts";
-
-setupReplaceUnsafeHeader(axios);
 
 type TRecommendationEnrichmentMode = "all" | "none" | "visible";
 

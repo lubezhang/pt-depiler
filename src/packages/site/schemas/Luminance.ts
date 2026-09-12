@@ -85,9 +85,7 @@ export const SchemaMetadata: Partial<ISiteMetadata> = {
       {
         requestConfig: {
           url: "/user.php",
-          params: {
-            /* id: flushUserInfo.id */
-          },
+          params: {/* id: flushUserInfo.id */},
           responseType: "document",
         },
         assertion: { id: "params.id" },
@@ -193,21 +191,8 @@ export const SchemaMetadata: Partial<ISiteMetadata> = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/torrents\\.php(?!\\?id=\\d+$)"],
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrents\\.php\\?id=\\d+"],
     selectors: {
-      title: { selector: ["#content > .details > h2", "table.torrent_table tr[id] strong"] },
-      id: {
-        selector: ["a[href*='/torrents.php?action=download']"],
-        attr: "href",
-        filters: [(query: string) => query.match(/id=(\d+)/)![1]],
-      },
       link: {
         selector: ["a[href*='/torrents.php?action=download']"],
         attr: "href",

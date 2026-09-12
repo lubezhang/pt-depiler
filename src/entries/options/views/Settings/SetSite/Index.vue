@@ -55,14 +55,6 @@ const tableHeader = computed(() => {
       align: "center",
     },
   ];
-  if (configStore.contentScript.enabled && configStore.contentScript.allowExceptionSites) {
-    baseHeaders.push({
-      title: t("SetSite.common.allowContentScript"),
-      key: "userConfig.allowContentScript",
-      align: "center",
-    });
-  }
-
   return [...baseHeaders, { title: t("common.action"), key: "action", sortable: false }] as DataTableHeader[];
 });
 
@@ -289,16 +281,6 @@ async function flushSiteFavicon(siteId: TSiteID | TSiteID[]) {
           color="success"
           hide-details
           @update:model-value="(v) => metadataStore.simplePatch('sites', item.id, 'allowQueryUserInfo', v as boolean)"
-        />
-      </template>
-      <template #item.userConfig.allowContentScript="{ item }">
-        <v-switch
-          v-model="item.userConfig.allowContentScript"
-          :disabled="item.metadata.isDead || item.userConfig.isOffline"
-          class="table-switch-btn"
-          color="success"
-          hide-details
-          @update:model-value="(v) => metadataStore.simplePatch('sites', item.id, 'allowContentScript', v as boolean)"
         />
       </template>
       <template #item.action="{ item }">

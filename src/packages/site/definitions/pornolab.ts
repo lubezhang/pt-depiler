@@ -198,9 +198,7 @@ export const siteMetadata: ISiteMetadata = {
   },
 
   detail: {
-    urlPattern: ["/forum/viewtopic\\.php\\?t=\\d+"],
     selectors: {
-      title: { selector: "a#topic-title" },
       link: { selector: "a.dl-link", attr: "href" },
     },
   },

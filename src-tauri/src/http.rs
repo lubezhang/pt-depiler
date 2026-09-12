@@ -1002,15 +1002,7 @@ pub async fn get_cookies(
     Ok(cookies)
 }
 
-#[tauri::command]
-pub async fn get_cookie(
-    url: String,
-    name: String,
-    state: State<'_, AppState>,
-) -> Result<Option<CookieInfo>, String> {
-    get_cookie_with_state(url, name, state.inner())
-}
-
+#[cfg(test)]
 fn get_cookie_with_state(
     url: String,
     name: String,
@@ -1073,15 +1065,7 @@ fn set_cookie_with_state(cookie: CookieInfo, state: &AppState) -> Result<(), Str
     state.persist_cookies()
 }
 
-#[tauri::command]
-pub async fn remove_cookie(
-    url: String,
-    name: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    remove_cookie_with_state(url, name, state.inner())
-}
-
+#[cfg(test)]
 fn remove_cookie_with_state(url: String, name: String, state: &AppState) -> Result<(), String> {
     let url = Url::parse(&url).map_err(|e| e.to_string())?;
     let mut store = state.cookie_store.lock().map_err(|e| e.to_string())?;

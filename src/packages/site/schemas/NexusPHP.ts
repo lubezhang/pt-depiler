@@ -342,7 +342,7 @@ export const defaultUserLevelRequirements = xiaomloveDefaultUserLevelRequirement
  */
 export const SchemaMetadata: Pick<
   ISiteMetadata,
-  "version" | "schema" | "type" | "timezoneOffset" | "search" | "list" | "userInfo" | "detail"
+  "version" | "schema" | "type" | "timezoneOffset" | "search" | "userInfo" | "detail"
 > = {
   version: 0,
   schema: "NexusPHP",
@@ -485,42 +485,8 @@ export const SchemaMetadata: Pick<
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/torrents.php", "/special.php"],
-    },
-  ],
-
   detail: {
-    urlPattern: ["/details.php"],
-
     selectors: {
-      title: {
-        selector: ["h1#top", "html > body > title"],
-        switchFilters: {
-          "h1#top": [
-            (title: string) => {
-              // ^(.+?)   .+$
-              let titleMatch = title.match(/^(.+?) +.+$/);
-              if (titleMatch && titleMatch.length >= 2) {
-                return titleMatch[1].trim();
-              }
-              return title;
-            },
-          ],
-
-          "html > body > title": [
-            (title: string) => {
-              // {siteName} :: 种子详情 "{torrentName}" - Powered by NexusPHP
-              let titleMatch = title.match(/"(.+)" - Powered by NexusPHP$/);
-              if (titleMatch && titleMatch.length >= 3) {
-                return titleMatch[2].trim();
-              }
-              return title;
-            },
-          ],
-        },
-      },
       link: {
         selector: [
           'a[href*="download.php?id="][href*="&downhash="]',

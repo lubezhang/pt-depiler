@@ -6,9 +6,6 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 import vue from "@vitejs/plugin-vue";
 import vuetify from "vite-plugin-vuetify";
 
-// @ts-ignore
-import { vitePluginGenerateWebextLocales } from "./vite/plugin/generateWebextLocales.ts";
-
 import git from "git-rev-sync";
 import pkg from "./package.json";
 
@@ -31,7 +28,6 @@ export default defineConfig({
     emptyOutDir: true,
   },
   plugins: [
-    vitePluginGenerateWebextLocales(),
     nodePolyfills({
       include: ["buffer", "path"],
       globals: {
@@ -49,8 +45,7 @@ export default defineConfig({
     },
   },
   define: {
-    __BROWSER__: JSON.stringify("tauri"),
-    __EXT_VERSION__: JSON.stringify(`v${commit_version}`),
+    __APP_VERSION__: JSON.stringify(`v${commit_version}`),
     __GIT_VERSION__: {
       short: git.short(__dirname),
       long: git.long(__dirname),

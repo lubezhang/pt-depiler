@@ -284,9 +284,7 @@ export const siteMetadata: ISiteMetadata = {
   },
 
   detail: {
-    urlPattern: ["/viewtopic\\.php\\?t=\\d+"],
     selectors: {
-      title: { selector: "a.tt-text[href^='viewtopic.php?t=']" },
       link: { selector: "a[href^='dl.php?id=']", attr: "href" },
     },
   },

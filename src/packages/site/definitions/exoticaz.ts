@@ -1,9 +1,5 @@
 import { ISiteMetadata, ISearchInput, IAdvancedSearchRequestConfig, ITorrent, ITorrentTag } from "../types";
-import AvistazNetwork, {
-  SchemaMetadata,
-  avzNetDiscountMap,
-  IAvzNetRawTorrent,
-} from "../schemas/AvistazNetwork.ts";
+import AvistazNetwork, { SchemaMetadata, avzNetDiscountMap, IAvzNetRawTorrent } from "../schemas/AvistazNetwork.ts";
 
 const categoryMap: Record<number, string> = {
   1: "Video Clips",
@@ -109,91 +105,9 @@ export const siteMetadata: ISiteMetadata = {
     area_adult: { name: "成人", enabled: false },
   },
 
-  list: [
-    // 种子列表页
-    {
-      urlPattern: ["/torrents"],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: {
-          selector: "#content-area > div.card.mt-2 > div.card-body.p-2 > div.table-responsive > table > tbody > tr",
-        },
-
-        id: {
-          selector: "div.mb-1 a[href*='/torrent/']",
-          attr: "href",
-          filters: [
-            (href: string) => {
-              const torrentIdMatch = href.match(/\/torrent\/(\d+)/);
-              if (torrentIdMatch && torrentIdMatch[1]) {
-                return torrentIdMatch[1];
-              }
-              return undefined;
-            },
-          ],
-        },
-        title: { selector: "div.mb-1 a[href*='/torrent/']" },
-        category: { selector: ".category-icon[data-original-title]", attr: "data-original-title" },
-        url: { selector: "div.mb-1 a[href*='/torrent/']", attr: "href" },
-        link: { selector: "div.align-top a[href*='/download/torrent/']", attr: "href" },
-        // time显示为1 minute/1 hour，放弃获取
-        size: { selector: "td:nth-child(5)", filters: [{ name: "parseSize" }] },
-
-        seeders: { selector: "td:nth-child(6)" },
-        leechers: { selector: "td:nth-child(7)" },
-        completed: { selector: "td:nth-child(8)" },
-      },
-    },
-    // 下载历史页和HR页
-    {
-      urlPattern: ["/profile/(.+)/history"],
-      mergeSearchSelectors: false,
-      selectors: {
-        subTitle: { text: "" },
-        comments: { text: "N/A" },
-        rows: { selector: "div.card-body.p-2 > div.table-responsive > table > tbody > tr" },
-
-        id: {
-          selector: "div.mb-1 a[href*='/torrent/']",
-          attr: "href",
-          filters: [
-            (href: string) => {
-              const torrentIdMatch = href.match(/\/torrent\/(\d+)/);
-              if (torrentIdMatch && torrentIdMatch[1]) {
-                return torrentIdMatch[1];
-              }
-              return undefined;
-            },
-          ],
-        },
-        title: { selector: "div.mb-1 a[href*='/torrent/']", attr: "title" },
-        // Bootstrap tooltip 初始化后会将 title 移至 data-original-title
-        category: { selector: "i.category-icon", attr: "data-original-title" },
-        url: { selector: "div.mb-1 a[href*='/torrent/']", attr: "href" },
-        link: { selector: "div.float-right a[href*='/download/torrent/']", attr: "href" },
-        // 通过 div.d-block 父上下文限定范围，避免与行内其他同色 span 冲突，同时不依赖 title 属性
-        size: { selector: "div.d-block span.text-yellow", filters: [{ name: "parseSize" }] },
-        seeders: { selector: "div.d-block span.text-green.mr-2" },
-        leechers: { selector: "div.d-block span.text-red.mr-2" },
-        completed: { selector: "div.d-block span.text-blue.mr-2" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrent/"],
     selectors: {
       ...SchemaMetadata.detail!.selectors!,
-      title: {
-        selector: "table.table tr:contains('Title') td:nth-child(2)",
-        elementProcess: (element) => {
-          const text = element.textContent.trim();
-          // 匹配 [xxxx-xxxx] 格式
-          const match = text.match(/\[([^\]]+)\]/);
-          // 如果匹配到就返回括号内的内容,否则返回原文本
-          return match ? match[1] : text;
-        },
-      },
     },
   },
 

@@ -93,13 +93,6 @@ const categoryOptions = [
   { name: "Radio - Reading", value: 132 },
 ];
 
-const commonDocumentSelectors = {
-  id: { selector: "a[href*='/t/']", attr: "href", filters: [{ name: "parseNumber" }] },
-  title: { selector: "a.torTitle" },
-  url: { selector: "a.torTitle", attr: "href" },
-  link: { selector: "a.directDownload", attr: "href" },
-};
-
 interface IMyAnonamouseLoadItem {
   count: number;
   red: boolean;
@@ -117,17 +110,19 @@ interface INotifs {
 }
 
 type IMyAnonamouseLoadResp = {
-  [K in
-    | "inactHnr"
-    | "inactSat"
-    | "inactUnsat"
-    | "leeching"
-    | "sSat"
-    | "seedHnr"
-    | "seedUnsat"
-    | "unsat"
-    | "upAct"
-    | "upInact"]: IMyAnonamouseLoadItem;
+  [
+    K in
+      | "inactHnr"
+      | "inactSat"
+      | "inactUnsat"
+      | "leeching"
+      | "sSat"
+      | "seedHnr"
+      | "seedUnsat"
+      | "unsat"
+      | "upAct"
+      | "upInact"
+  ]: IMyAnonamouseLoadItem;
 } & {
   notifs: INotifs;
 };
@@ -235,30 +230,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [/\/tor\/browse\.php(\?.*)?$/],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "tr[id]" },
-        ...commonDocumentSelectors,
-      },
-    },
-    {
-      urlPattern: [/\/stats\/top10Tor\.php(\?.*)?$/],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "table.newTorTable > tbody > tr" },
-        ...commonDocumentSelectors,
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: [/\/t\/\d+(\?.*)?$/],
     selectors: {
-      id: { selector: "input[name=tid]", attr: "value" },
-      title: { selector: ".TorrentTitle" },
       link: { selector: "a.torFormButton", attr: "href" },
     },
   },

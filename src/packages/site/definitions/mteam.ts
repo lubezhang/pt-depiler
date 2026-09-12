@@ -3,15 +3,7 @@ import { set } from "es-toolkit/compat";
 import { build as buildDouban } from "@ptd/social/entity/douban.ts";
 import { build as buildImdb } from "@ptd/social/entity/imdb.ts";
 
-import {
-  type ILevelRequirement,
-  ISearchInput,
-  ISiteMetadata,
-  ITorrent,
-  ITorrentTag,
-  TSchemaMetadataListSelectors,
-  ETorrentStatus,
-} from "../types";
+import { type ILevelRequirement, ISearchInput, ISiteMetadata, ITorrent, ITorrentTag, ETorrentStatus } from "../types";
 import PrivateSite from "../schemas/AbstractPrivateSite.ts";
 
 const siteCategory: { value: string; name: string; type: "normal" | "adult" }[] = [
@@ -52,17 +44,6 @@ const siteCategory: { value: string; name: string; type: "normal" | "adult" }[] 
   { value: "412", name: "H-動畫", type: "adult" },
   { value: "413", name: "H-漫畫", type: "adult" },
 ];
-
-const commonListSelectors: TSchemaMetadataListSelectors = {
-  id: { selector: "a[href*='/detail/']", attr: "href", filters: [{ name: "parseNumber" }] },
-  title: { selector: "a[href*='/detail/'] strong > span:nth-last-child(1)" },
-  url: { selector: "a[href*='/detail/']", attr: "href" },
-  // link: 不返回，在 class 中单独构造
-  completed: { text: "-" }, // 页面中不返回 completed
-
-  // 其实并没有必要特别声明这个
-  keywords: { selector: "input#keyword", elementProcess: (el: HTMLInputElement) => el.value },
-};
 
 const levelRequirements: (ILevelRequirement & { levelId?: string })[] = [
   {
@@ -408,87 +389,8 @@ export const siteMetadata: ISiteMetadata = {
     ],
   },
 
-  list: [
-    // 2025.07.31: 原舊風格域名將移至 ob.
-    {
-      urlPattern: [/\/\/ob\..+\/browse/],
-      mergeSearchSelectors: false,
-      selectors: {
-        ...commonListSelectors,
-        rows: { selector: "tbody.bg-\\[\\#bccad6\\] > tr" },
-        subTitle: { selector: "a[href*='/detail/'] + br + div > span" },
-
-        time: {
-          selector: "td:nth-last-child(4) > span[title]",
-          elementProcess: (el: HTMLInputElement) => {
-            return el.getAttribute("title") || el.textContent;
-          },
-          filters: [{ name: "parseTime" }],
-        },
-        size: { selector: "td:nth-last-child(3)", filters: [{ name: "parseSize" }] },
-        seeders: { selector: 'span[aria-label="arrow-up"] + span' },
-        leechers: { selector: 'span[aria-label="arrow-down"] + span' },
-
-        comments: { selector: "td:nth-last-child(5)" },
-        category: { selector: "img[src*='/static/cate'][alt]", attr: "alt" },
-        ext_douban: { selector: "a[href^='https://movie.douban.com/subject/']", filters: [{ name: "extDoubanId" }] },
-        ext_imdb: { selector: "a[href^='https://www.imdb.com/title/']", filters: [{ name: "extImdbId" }] },
-      },
-    },
-
-    // 2025.07.31: 將於 20250801 將新風格(next域名)應用於主要域名(kp等等)
-    {
-      urlPattern: ["/browse"],
-      mergeSearchSelectors: false,
-      selectors: {
-        ...commonListSelectors,
-
-        rows: { selector: "div.app-content__inner table.w-full > tbody > tr" },
-        title: { selector: "a[href*='/detail/'] strong" },
-        subTitle: { selector: "a[href*='/detail/'] + br + div > span:nth-last-child(1)" },
-
-        time: {
-          selector: "td:nth-last-child(5) > span[title]",
-          elementProcess: (el: HTMLInputElement) => {
-            return el.getAttribute("title") || el.textContent;
-          },
-          filters: [{ name: "parseTime" }],
-        },
-        size: { selector: "td:nth-last-child(4)", filters: [{ name: "parseSize" }] },
-
-        seeders: { selector: "td:nth-last-child(3) span.align-middle:nth-last-child(1)" },
-        leechers: { selector: "td:nth-last-child(2) span.align-middle:nth-last-child(1)" },
-        comments: { selector: "td:nth-last-child(6)" },
-        category: { selector: "a[href^='/browse?cat='] > span" },
-        ext_douban: {
-          selector: "a[href^='/mdb/title'][href*='douban=']",
-          filters: [{ name: "querystring", args: ["douban"] }, { name: "extDoubanId" }],
-        },
-        ext_imdb: {
-          selector: "a[href^='/mdb/title'][href*='imdb=']",
-          filters: [{ name: "querystring", args: ["imdb"] }, { name: "extImdbId" }],
-        },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/detail/", "#/torrent/\\d+"],
     selectors: {
-      id: {
-        selector: ":self",
-        elementProcess: (element: Document) => {
-          return extractTorrentIdFromUrl(element.URL) ?? element.URL;
-        },
-      },
-      title: {
-        selector: ["h2 > span.align-middle", "title"],
-        filters: [
-          // 当回落到 title 中替换掉两侧的无关内容
-          { name: "replace", args: ['M-Team - TP :: 種子詳情 "', ""] },
-          { name: "replace", args: ['" - Powered by mTorrent', ""] },
-        ],
-      },
       link: { text: "" },
     },
   },
@@ -647,10 +549,6 @@ export default class MTeam extends PrivateSite {
     }
   }
 
-  private buildConfiguredDetailUrl(torrentId: string | number): string {
-    return new URL(`/detail/${torrentId}`, this.normalizedSiteUrl).toString();
-  }
-
   public override async request<T>(
     axiosConfig: AxiosRequestConfig,
     checkLogin: boolean = true,
@@ -678,19 +576,6 @@ export default class MTeam extends PrivateSite {
 
   protected override fixLink(uri: string, requestConfig: AxiosRequestConfig): string {
     return super.fixLink(uri, { ...requestConfig, baseURL: this.normalizedSiteUrl }); // 将 baseURL 重新指向回 web 页面
-  }
-
-  public override async transformDetailPage(doc: Document): Promise<ITorrent> {
-    const torrent = await super.transformDetailPage(doc);
-    const torrentId = torrent.id || extractTorrentIdFromUrl(doc.URL);
-
-    if (torrentId) {
-      torrent.id = String(torrentId);
-      torrent.url = this.buildConfiguredDetailUrl(torrent.id);
-      torrent.link ||= torrent.url;
-    }
-
-    return torrent;
   }
 
   private mapDiscountToTag(discount?: string | null): ITorrentTag | undefined {

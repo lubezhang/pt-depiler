@@ -139,9 +139,7 @@ export const siteMetadata: ISiteMetadata = {
   },
 
   detail: {
-    urlPattern: [/\/torrent\/(\d+)\/([^/]+)$/],
     selectors: {
-      title: { selector: "div.title" },
       link: { selector: ".download_link", attr: "href" },
     },
   },

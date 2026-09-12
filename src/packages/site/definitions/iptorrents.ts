@@ -251,45 +251,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/t"],
-      excludeUrlPattern: ["/t/\\d+", "/torrent\\.php\\?id=\\d+"],
-      selectors: {
-        title: {
-          selector: " > td.al > a",
-          elementProcess: (el: HTMLElement) => {
-            el.querySelectorAll("div.tTip").forEach((e) => e.remove());
-            return el.innerText || el.textContent;
-          },
-        },
-      },
-    },
-    {
-      urlPattern: ["/indexipt\\.php"],
-      selectors: {
-        size: {
-          selector: "div.ar.c3",
-          filters: [{ name: "split", args: ["|", 0] }, { name: "trim" }, { name: "parseSize" }],
-        },
-        time: {
-          selector: "span.elapsedDate",
-          attr: "title",
-          filters: [{ name: "parseTime", args: ["EEEE, MMMM d, yyyy 'at' h:mmaa"] }],
-        },
-        seeders: { selector: "> td:nth-child(5)" },
-        leechers: { selector: "> td:nth-child(6)" },
-        completed: { selector: "> td:nth-child(7)" },
-        comments: { selector: "> td:nth-child(8)" },
-        // TODO category 需要映射类型编号
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/t/\\d+", "/torrent\\.php\\?id=\\d+"],
     selectors: {
-      title: { selector: "div.dBox > h2" },
       link: { selector: "div.info a[href*='download.php']", attr: "href" },
     },
   },

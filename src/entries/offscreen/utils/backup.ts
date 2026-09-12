@@ -43,7 +43,7 @@ export async function createBackupData(backupFields: TBackupFields[] = []): Prom
     backupData.cookies = cookies;
   }
 
-  // 处理直接从 chrome.storage.local 读取的字段
+  // 处理应用持久化存储字段
   for (const field of storageKey) {
     if (backupFields.includes(field as TBackupFields)) {
       backupData[field] = await sendMessage("getExtStorage", field);
@@ -57,7 +57,7 @@ export async function createBackupData(backupFields: TBackupFields[] = []): Prom
 
   backupData.manifest = {
     time: new Date().getTime(),
-    version: `PT-Depiler (${__EXT_VERSION__})`,
+    version: `PT-Depiler (${__APP_VERSION__})`,
   };
 
   logger({
@@ -88,7 +88,7 @@ export async function exportBackupData(
   if (backupServerId === "local") {
     const jsZipBlob = await backupDataToJSZipBlob(backupData, encryptionKey);
     const blobUrl = URL.createObjectURL(jsZipBlob);
-    await sendMessage("downloadFile", { url: blobUrl, filename: backupFilename, conflictAction: "uniquify" });
+    await sendMessage("downloadFile", { url: blobUrl, filename: backupFilename });
     return true;
   } else {
     const backupServerInstance = await getBackupServerInstance(backupServerId);
@@ -128,7 +128,7 @@ export async function restoreBackupData(
     }
   }
 
-  // 恢复直接从 chrome.storage.local 读取的字段
+  // 恢复应用持久化存储字段
   for (const field of storageKey.toReversed()) {
     if (restoreFields.includes(field as TBackupFields)) {
       let fieldData = restoreData[field] as IExtensionStorageSchema[typeof field];
@@ -154,7 +154,7 @@ export async function restoreBackupData(
           cookie.expirationDate = Math.max(cookie.expirationDate ?? 0, now) + expandCookieMinutes * 60;
         }
 
-        await sendMessage("setCookie", cookie as unknown as chrome.cookies.SetDetails);
+        await sendMessage("setCookie", cookie);
       }
     }
   }

@@ -164,16 +164,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/index\\.php\\?page\\=torrents"],
-    },
-  ],
-
   detail: {
-    urlPattern: ["/index\\.php\\?page\\=torrent-details"],
     selectors: {
-      title: { selector: "a[href^='download.php?id=']", filters: [{ name: "trim" }] },
       link: { selector: "a[href^='download.php?id=']", attr: "href" },
     },
   },

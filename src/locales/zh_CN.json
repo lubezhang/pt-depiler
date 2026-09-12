@@ -1,8 +1,4 @@
 {
-  "ContextMenuLinkPush": {
-    "invalidLink": "无效的下载链接",
-    "keywordWarning": "右键推送链接时，部分 下载路径或标签的 关键字功能可能无法正常工作！"
-  },
   "Debugger": {
     "addServerFirst": "请先在 Set{serverType} 页面添加服务器",
     "confirmReset": "确定要重置吗？",
@@ -21,7 +17,7 @@
     "outputSiteDefinition": "输出站点定义",
     "outputSiteInstance": "输出站点实例",
     "outputUserConfig": "输出用户配置信息",
-    "pluginReset": "插件重置",
+    "pluginReset": "应用重置",
     "resetItems": {
       "clearDownloadHistory": "清空历史下载记录",
       "clearFaviconCache": "清空站点 Favicon 缓存",
@@ -445,10 +441,10 @@
       "selectFile": "选择备份文件",
       "success": "恢复成功",
       "title": "从备份文件中恢复",
-      "versionWarning": "备份数据版本高于当前扩展版本，恢复可能会导致数据不兼容或丢失，是否继续？"
+      "versionWarning": "备份数据版本高于当前应用版本，恢复可能会导致数据不兼容或丢失，是否继续？"
     },
     "fields": {
-      "config": "插件配置（config）",
+      "config": "应用配置（config）",
       "cookies": "站点 Cookies（cookies）",
       "downloadHistory": "下载历史（downloadHistory）",
       "keepUploadTask": "辅种任务（keepUploadTask）",
@@ -482,17 +478,17 @@
       "localDownloadIgnoreInterval": "本地下载时忽略站点下载间隔限制",
       "localDownloadMethod": "本地下载方式",
       "localDownloadMethodOptions": {
-        "browser": "浏览器方法",
-        "browserTip": "（推荐）调用浏览器为插件提供的下载方法直接下载",
-        "extension": "插件中转",
-        "extensionTip": "插件后台下载种子，并中转到 @:SetBase.download.localDownloadMethodOptions.browser 进行下载",
-        "web": "网页打开",
-        "webTip": "打开下载链接对应的页面（只适用于最简单的方式，如果不符合条件，则会回落到 @:SetBase.download.localDownloadMethodOptions.extension ）"
+        "browser": "原生下载",
+        "browserTip": "（推荐）由 Tauri 原生下载命令直接保存文件",
+        "extension": "应用中转",
+        "extensionTip": "由应用获取并解析种子后保存到本地",
+        "web": "打开链接",
+        "webTip": "直接打开下载链接；不支持时自动回落到应用中转"
       },
       "localDownloadTitle": "本地下载",
       "myClientTitle": "我的下载器页面设置",
       "pushDownloadServerTitle": "下载服务器推送",
-      "quickSendToClientNote": "启用快速推送后，插件会在推送下载任务时，做以下默认操作：<br />1. 展平 下载器和下载目录 选项供直接点击推送。<br />2. 鼠标移到选项时，则会暂开标签列表，点击时会额外添加标签信息。<br />3. 均采用本地中转模式推送种子，且 `是否自动开始下载` 等基本设置项和下载器专有配置项值由下载器设置和站点设置决定。",
+      "quickSendToClientNote": "启用快速推送后，应用会在推送下载任务时，做以下默认操作：<br />1. 展平 下载器和下载目录 选项供直接点击推送。<br />2. 鼠标移到选项时，则会暂开标签列表，点击时会额外添加标签信息。<br />3. 均采用本地中转模式推送种子，且 `是否自动开始下载` 等基本设置项和下载器专有配置项值由下载器设置和站点设置决定。",
       "saveDownloadHistory": "是否保存下载历史（如非必要请勿关闭此功能）",
       "saveLastDownloader": "保存上一次使用的下载服务器设置",
       "useQuickSendToClient": "默认使用快速推送"
@@ -524,49 +520,23 @@
     "tab": {
       "backup": "备份恢复",
       "download": "下载",
-      "native-bridge": "原生通信桥",
       "search-entity": "@:common.search",
       "social-information": "媒体评分",
       "ui": "界面UI",
       "user-info": "用户信息"
     },
     "ui": {
-      "allowDragLink": "允许拖拽链接到侧边栏按钮",
-      "allowExceptionSites": "允许设置不启用侧边栏的例外站点（启用后需在站点设置中对应关闭）",
-      "basicSettings": "基本设置",
       "changeLanguage": "切换语言",
-      "confirmTwoStep": "对种子列表页批量复制、本地下载等操作需要二步确认",
-      "contentScript": "内容脚本（站点侧边栏等）",
-      "contentScriptWarning": "启用或禁用相关功能后需要保存设置，并刷新站点页面才能生效。",
-      "contextMenu": "右键菜单",
-      "contextMenuLinkPush": "启用（下载）链接推送",
-      "contextMenuSocialSearch": "启用社交链接（ douban, imdb ）搜索",
-      "contextMenuTextSearch": "启用选中文字搜索",
       "displayMode": {
         "auto": "跟随系统",
         "dark": "暗黑模式",
         "index": "页面显示模式",
         "light": "明亮模式"
       },
-      "dragNote": "拖拽时的下载链接不一定能被正确识别！",
-      "enableFadeEffect": "启用淡入效果（即默认半透明，当鼠标移入时显示）",
-      "enableOnSocialSite": "在社交站点（如豆瓣、IMDb）启用侧边栏",
       "enableTableMultiSort": "启用部分表格的多列排序功能",
-      "expandByDefault": "默认展开侧边栏按钮",
-      "respondDisplayMode": "响应插件设置中的 ",
       "saveTableBehavior": "记忆部分表格的 表头列展示、排序、分页 等信息",
-      "showReleaseNote": "插件更新时显示更新日志窗口",
-      "sidebarFunctions": "侧边栏功能",
-      "sidebarStyle": "侧边栏样式",
-      "socialSiteSearchBy": {
-        "chosen": "让我选择",
-        "id": "按 ID 搜索",
-        "imdb": "按 IMDb 编号 搜索",
-        "title": "按 主标题 搜索"
-      },
-      "socialSiteSearchLabel": "社交站点搜索方式",
-      "tableMultiSortNote": "多列排序使用方法：点击任意表头字段开始排序，字段上会显示数字“1”。再点击其他字段，依次显示“2”“3”，表示排序优先级。再次点击相同字段可切换升序、降序或取消排序。排序顺序由这些数字决定，数字越小优先级越高。",
-      "useLargeIcon": "使用大图标按键"
+      "showReleaseNote": "应用更新时显示更新日志窗口",
+      "tableMultiSortNote": "多列排序使用方法：点击任意表头字段开始排序，字段上会显示数字“1”。再点击其他字段，依次显示“2”“3”，表示排序优先级。再次点击相同字段可切换升序、降序或取消排序。排序顺序由这些数字决定，数字越小优先级越高。"
     },
     "userInfo": {
       "afterTime": "每日最早刷新时间",
@@ -669,41 +639,9 @@
     },
     "siteFilter": {
       "excludedSites": "排除的站点",
-      "excludedSitesHint": "如果站点被排除，则在站点页面不会显示该下载器（在助手聚合搜索页面不生效）",
+      "excludedSitesHint": "被排除后，该下载器不会出现在对应站点的推送选项中。",
       "noSites": "暂无已添加的站点",
       "title": "设置下载器 [{0}] 的站点过滤（排除方式）"
-    }
-  },
-  "SetNativeBridge": {
-    "bridge": {
-      "enabled": "启用原生通信桥",
-      "status": {
-        "connected": "已连接",
-        "connecting": "连接中...",
-        "disabled": "已禁用",
-        "error": "错误",
-        "no-permission": "未授权",
-        "retrying": "重试中..."
-      },
-      "testConnection": "测试连接",
-      "title": "通信桥控制"
-    },
-    "info": {
-      "cliLink": "ptd-cli",
-      "cliRequired": "此功能需要安装外部 CLI 工具。移动平台上不可用。安装说明请参考 {0}。",
-      "description": "原生通信桥允许 PT-Depiler CLI 工具与本扩展进行通信。需要在电脑上单独安装 CLI 工具。",
-      "privacy": "启用后，原生通信桥允许本地安装的 CLI 工具访问扩展数据，包括站点配置、搜索结果、下载历史、用户信息和下载器状态。所有通信均在本地进行（浏览器与本机进程之间），不会将数据发送至任何远程服务器。您可以随时禁用此功能或撤销权限。",
-      "setupCommand": "运行以下命令将此扩展注册到 CLI 工具：",
-      "setupHint": "运行命令后，重启浏览器或点击测试连接。",
-      "title": "关于原生通信桥"
-    },
-    "permission": {
-      "grant": "授予权限",
-      "grantFailed": "权限请求被拒绝",
-      "granted": "已授权",
-      "notGranted": "未授权",
-      "revoke": "撤销权限",
-      "title": "权限"
     }
   },
   "SetSearchSolution": {
@@ -733,7 +671,7 @@
         "reset": "重置此@:SetSearchSolution.solution"
       },
       "noDefNotice": "该站点未定义搜索模块，请到项目仓库提供帮助！",
-      "notice": "不推荐在此处进行设置，更建议在对应站点的个人设置中配置或使用插件提供的搜索方案功能！",
+      "notice": "不推荐在此处进行设置，更建议在对应站点的个人设置中配置或使用应用提供的搜索方案功能！",
       "selectAllNotice": "（注意：在大多数情况下，你并不需要全选所有搜索项！）",
       "title": "配置站点默认搜索模式 - {name}"
     },
@@ -749,9 +687,9 @@
     },
     "Editor": {
       "downloadInterval": "下载间隔",
-      "downloadIntervalHint": "影响该站点的下载间隔时间（为了安全考虑，插件不会严格遵守该设置，实际间隔总是会略大于等于设置的间隔）",
+      "downloadIntervalHint": "影响该站点的下载间隔时间（为了安全考虑，应用不会严格遵守该设置，实际间隔总是会略大于等于设置的间隔）",
       "downloadLinkSuffix": "下载链接后缀",
-      "downloadLinkSuffixExample": "如插件获得的链接为 https://example.com/download.php?id=1，此处设置为 &passkey=xxxx， 则最终下载链接为 https://example.com/download.php?id=1&passkey=xxxx. 通常无须填写，仅在无法获得 passkey 时可手动添加",
+      "downloadLinkSuffixExample": "如应用获得的链接为 https://example.com/download.php?id=1，此处设置为 &passkey=xxxx， 则最终下载链接为 https://example.com/download.php?id=1&passkey=xxxx. 通常无须填写，仅在无法获得 passkey 时可手动添加",
       "downloadLinkSuffixHint": "该字段会被自动添加到该站点的下载链接后",
       "otherSettings": "其他设置",
       "requestTimeout": "请求超时",
@@ -773,7 +711,6 @@
     },
     "common": {
       "aka": "站点别名",
-      "allowContentScript": "加载侧边栏",
       "allowQueryUserInfo": "获取个人信息",
       "allowSearch": "允许搜索",
       "groups": "站点分类",
@@ -823,14 +760,14 @@
       "flushFaviconFinish": "所选站点的图标已成功刷新！",
       "oneClickImport": "一键导入站点",
       "reBuildMap": "重建站点映射",
-      "settingNote": ["只有配置过的站点才会显示插件图标及相应的功能；", "已离线的站点不再参与搜索和信息获取；"],
+      "settingNote": ["只有配置过的站点才会显示相应功能；", "已离线的站点不再参与搜索和信息获取；"],
       "table": {
         "flushFavicon": "刷新站点图标",
         "searchEntries": "搜索入口"
       }
     },
     "oneClickImportDialog": {
-      "alert1": "此操作会尝试以默认配置导入你选择的站点，请确保该站点已在浏览器上登录过。导入过程不能中断，请耐心等待。",
+      "alert1": "此操作会尝试以默认配置导入你选择的站点，请确保应用已同步这些站点的登录 Cookie。导入过程不能中断，请耐心等待。",
       "alert2": "未添加的站点列表",
       "importComplete": "一键导入完成，成功添加 {count} 个站点",
       "stats": "已选择 {count} 个站点，已添加 {success} 个站点，添加失败 {failed} 个站点。",
@@ -1000,41 +937,13 @@
     "type": "类型",
     "username": "用户名",
     "version": "版本",
-    "visit": "访问"
+    "visit": "访问",
+    "appName": "PT Depiler"
   },
   "connectCheck": {
     "default": "检查连接性",
     "error": "连接失败！请检查填写的信息或者你的远程服务器。",
     "success": "连接成功，你可以顺利进行下一步。"
-  },
-  "contentScript": {
-    "AdvanceListModuleDialog": {
-      "selectNotSeeding": "勾选未下载过",
-      "selectSeeders": "勾选上传行",
-      "selectedInfo": "已选中：{0} 个种子，总大小：{1}",
-      "title": "为 {0} 个种子自定义批量操作行为"
-    },
-    "SocialSiteParseResultsDialog": {
-      "defaultSeasonTitle": "单季",
-      "searchEntryTitle": "搜索{title}",
-      "searchExternalId": "搜索外部ID",
-      "searchId": "搜索ID",
-      "searchPlan": "搜索方案",
-      "searchTitle": "搜索标题",
-      "title": "快速搜索"
-    },
-    "advanceList": "高级列表",
-    "cannotParseDetailLink": "无法解析当前页面种子链接",
-    "copyLink": "复制链接",
-    "copyLinkFailed": "复制下载链接失败",
-    "copyLinkSuccess": "下载链接已复制到剪贴板",
-    "noTorrentParsed": "未解析到当前页面种子",
-    "openPTD": "打开PTD",
-    "parsePageFailed": "页面解析失败",
-    "parseResultEmpty": "未能解析出结果",
-    "pushTo": "推送到...",
-    "pushToDefault": "推送到默认下载器",
-    "quickSearch": "快捷搜索"
   },
   "downloaderLabel": {
     "localDownload": "本地下载"
@@ -1061,9 +970,9 @@
       },
       "navBarTip": "点击显示/隐藏导航栏",
       "searchPlan": {
-        "all": "@:manifest.searchPlanAll",
-        "default": "@:manifest.searchPlanDefault",
-        "singleSite": "@:manifest.searchPlanSingleSite"
+        "all": "全部站点",
+        "default": "默认",
+        "singleSite": "单个站点"
       },
       "searchTip": "输入种子关键字、IMDb编号进行搜索",
       "wiki": "帮助",
@@ -1075,7 +984,7 @@
       "currentVersion": "（当前版本）",
       "faq": "常见问题",
       "startUsing": "开始使用",
-      "title": "欢迎使用 {extName}",
+      "title": "欢迎使用 {appName}",
       "wiki": "Wiki 帮助"
     }
   },
@@ -1103,27 +1012,6 @@
     "trueUploaded": "真实上传量",
     "uploaded": "上传量",
     "uploads": "发布数"
-  },
-  "manifest": {
-    "contextMenuSearch": "使用 PT Depiler 搜索 \"%s\" 相关的种子",
-    "contextMenuSearchInDefault": "在默认方案中搜索",
-    "contextMenuSearchInSite": "在指定站点中搜索",
-    "contextMenuSearchInSolution": "在指定方案中搜索",
-    "contextMenuSearchInThisSite": "在本站点中搜索",
-    "contextMenuSearchWithDouban": "使用 PT Depiler 搜索当前豆瓣链接相关种子",
-    "contextMenuSearchWithIMDb": "使用 PT Depiler 搜索IMDb链接相关种子",
-    "contextMenuSendToDownloader": "使用 PT Depiler 下载链接",
-    "contextMenuSendToDownloaderAdvanced": "高级推送",
-    "contextMenuSendToDownloaderDefaultFolder": "默认路径",
-    "contextMenuSendToDownloaderIn": "推送到 $1 -> $2",
-    "extDesc": "PT Depiler",
-    "extName": "PT Depiler",
-    "notificationSendLinkToDownloaderFailure": "将链接发送到下载器 [$1] 失败",
-    "notificationSendLinkToDownloaderSuccess": "已成功将链接发送到下载器 [$1]",
-    "omniboxSearch": "在 [ $1 ] 中搜索 $2",
-    "searchPlanAll": "全部站点",
-    "searchPlanDefault": "默认",
-    "searchPlanSingleSite": "单个站点"
   },
   "ptppSettings": {
     "RestorePtppUserDataDialog": {

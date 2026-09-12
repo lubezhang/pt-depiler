@@ -87,21 +87,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [/\.org\/$/, /\/\?page=/, "/?filter", "/search"],
-      excludeUrlPattern: ["/view/"],
-      mergeSearchSelectors: true,
-      selectors: {
-        keywords: { selector: 'input[name="q"]', attr: "value" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/view/"],
     selectors: {
-      title: { selector: "h2#title" },
       link: { selector: ['a[href$=".torrent"]', 'a[href^="magnet:?xt="]'], attr: "href" },
     },
   },

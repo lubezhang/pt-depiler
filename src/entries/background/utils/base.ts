@@ -1,4 +1,3 @@
-import { stringify } from "urlencode";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { saveAs } from "file-saver";
@@ -6,33 +5,12 @@ import { saveAs } from "file-saver";
 import { onMessage } from "@/messages.ts";
 import { extStorage } from "@/storage.ts";
 
-export function openOptionsPage(url?: string | { path: string; query?: Record<string, any> }) {
-  if (url && typeof url !== "string") {
-    url = url.path + (url.query ? "?" + stringify(url.query) : "");
-  }
-  url ??= "/";
-  // Tauri 单窗口模型：通过 hash 路由跳转（替代原 chrome.tabs.create 打开 options 页）
-  window.location.hash = url;
-}
-
-onMessage("openOptionsPage", async ({ data: url }) => {
-  openOptionsPage(url);
-});
-
 /**
- * Tauri 迁移：替代原 chrome.downloads.download。
  * - blob:/data: URL 是前端创建的，Rust 无法访问，直接用 file-saver 保存；
  * - 远程 URL 用 @tauri-apps/plugin-dialog 选保存路径后，由 Rust download_to_local 写盘。
  */
-// @ts-ignore - Tauri 迁移：返回值语义变更（原 chrome.downloads.download 返回 downloadId）
 onMessage("downloadFile", async ({ data: downloadOptions }) => {
-  const { url, filename, headers } = downloadOptions as {
-    url: string;
-    filename?: string;
-    headers?: Record<string, string>;
-    method?: string;
-    body?: string;
-  };
+  const { url, filename, headers } = downloadOptions;
 
   if (url.startsWith("blob:") || url.startsWith("data:")) {
     const res = await fetch(url);

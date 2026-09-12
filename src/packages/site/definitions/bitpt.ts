@@ -242,17 +242,10 @@ export const siteMetadata: ISiteMetadata = {
   },
 
   detail: {
-    urlPattern: ["/forum\\.php\\?mod=viewthread&tid=(\\d+)"],
     selectors: {
-      title: { selector: "h1.ts span#thread_subject" },
       link: {
         selector: "a[href*='download.php?tid=']:not([href*='ssl'])",
         attr: "href",
-      },
-      id: {
-        selector: "a[href*='download.php?tid=']",
-        attr: "href",
-        filters: [{ name: "querystring", args: ["tid"] }],
       },
     },
   },

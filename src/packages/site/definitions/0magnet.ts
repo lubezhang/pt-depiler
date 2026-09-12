@@ -63,21 +63,9 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [{ urlPattern: ["/listing", "/search"] }],
-
   detail: {
-    urlPattern: ["/!"],
     selectors: {
-      title: { selector: "h2.magnet-title" },
       link: { selector: "input#input-magnet", attr: "value" },
-      time: {
-        selector: ["dt:contains('Date') + dd", "dt:contains('发布日期') + dd"],
-        filters: [{ name: "parseTime" }],
-      },
-      size: {
-        selector: ["dt:contains('Size') + dd", "dt:contains('文件大小') + dd"],
-        filters: [{ name: "parseSize" }],
-      },
     },
   },
 };

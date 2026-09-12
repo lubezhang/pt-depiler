@@ -108,17 +108,7 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/torrents_beta\\.php"],
-      selectors: {
-        keywords: { selector: "input[name='search']", attr: "value" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/details\\.php\\?id=[a-f0-9]+"],
     selectors: {
       link: { selector: "a[href*='download.php']", attr: "href" },
     },

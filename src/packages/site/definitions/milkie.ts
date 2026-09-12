@@ -66,29 +66,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [/\/browse(\?.*)?$/],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "tor-browse-list > div > tor-torrent-release" },
-        id: { selector: "a.mat-caption", attr: "href", filters: [{ name: "split", args: ["/", 2] }] },
-        title: { selector: "a.mat-caption", attr: "title" },
-        url: { selector: "a.mat-caption", attr: "href" },
-        link: { selector: "a.mat-icon-button", attr: "href" },
-        time: { selector: "span.date", attr: "title", filters: [{ name: "parseTime" }] },
-        size: { selector: "div.size > span" },
-        completed: { selector: "div.nos > span:nth-child(1)" },
-        seeders: { selector: "div.nos > span:nth-child(2)" },
-        leechers: { selector: "div.nos > span:nth-child(3)" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/browse/"],
     selectors: {
-      title: { selector: "tor-details-page h1" },
       link: { selector: "tor-torrent-details a.download", attr: "href" },
     },
   },

@@ -20,11 +20,6 @@ import { useMetadataStore } from "@/options/stores/metadata.ts";
 import { useConfigStore } from "@/options/stores/config.ts";
 import { sendMessage } from "@/messages.ts";
 
-import { setupReplaceUnsafeHeader } from "~/extends/axios/replaceUnsafeHeader.ts";
-import { setupRetryWhenCloudflareBlock } from "~/extends/axios/retryWhenCloudflareBlock.ts";
-
-setupRetryWhenCloudflareBlock(setupReplaceUnsafeHeader(axios));
-
 const { t } = useI18n();
 
 function enableLibrary() {

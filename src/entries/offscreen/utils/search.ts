@@ -1,13 +1,8 @@
 import { uniqBy } from "es-toolkit";
-import { getMediaServer } from "@ptd/mediaServer";
 import { normalizedTorrentTagMap, sortTorrentTags, type TPatterns } from "@ptd/site";
 
 import { onMessage, sendMessage } from "@/messages.ts";
-import type {
-  IConfigPiniaStorageSchema,
-  IMetadataPiniaStorageSchema,
-  TSearchResultSnapshotStorageSchema,
-} from "@/shared/types.ts";
+import type { IConfigPiniaStorageSchema, TSearchResultSnapshotStorageSchema } from "@/shared/types.ts";
 
 import { logger } from "./logger.ts";
 import { getSiteInstance } from "./site.ts";
@@ -57,17 +52,6 @@ onMessage("getSiteSearchResult", async ({ data: { siteId, keyword = "", searchEn
   }
 
   return searchResult;
-});
-
-onMessage("getMediaServerSearchResult", async ({ data: { mediaServerId, keywords = "", options = {} } }) => {
-  logger({
-    msg: `getMediaServerSearchResult For mediaServer: ${mediaServerId} with: ${keywords}`,
-    data: { mediaServerId, keywords, options },
-  });
-  const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
-  const mediaServerConfig = metadataStore.mediaServers[mediaServerId];
-  const mediaServer = await getMediaServer(mediaServerConfig);
-  return await mediaServer.getSearchResult(keywords ?? "", options);
 });
 
 async function getSnapshotData() {

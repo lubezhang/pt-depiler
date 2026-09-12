@@ -74,20 +74,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [/\/$/, "/topics/list"],
-      mergeSearchSelectors: true,
-      selectors: {
-        keywords: { selector: 'input[name="keyword"]', attr: "value" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/topics/view/"],
     selectors: {
-      title: { selector: "div.topic-title h3" },
       link: { selector: ['a[href*="dl.dmhy.org"][href$=".torrent"]', 'a[href^="magnet:?"]'], attr: "href" },
     },
   },

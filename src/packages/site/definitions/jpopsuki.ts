@@ -1,11 +1,5 @@
 import { ISiteMetadata, ITorrent, IUserInfo, ISearchInput } from "../types";
-import Gazelle, {
-  SchemaMetadata,
-  GazelleUtils,
-  commonPagesList,
-  detailPageList,
-  top10PageList,
-} from "../schemas/Gazelle.ts";
+import Gazelle, { SchemaMetadata, GazelleUtils } from "../schemas/Gazelle.ts";
 
 type boxName = "stats" | "community" | "personal";
 
@@ -112,61 +106,6 @@ export const siteMetadata: ISiteMetadata = {
       tags: [{ selector: "strong:contains('Freeleech!')", name: "Free", color: "blue" }],
     },
   },
-
-  list: [
-    {
-      ...commonPagesList,
-    },
-    {
-      ...detailPageList,
-      selectors: {
-        ...detailPageList.selectors,
-        // 从整个页面获取
-        keywords: {
-          selector: "div > h2",
-          // [Album] Ayumi Hamasaki - Rock'n'Roll Circus [2010.04.14]
-          elementProcess: (el: HTMLElement) => {
-            const clone = el.cloneNode(true) as HTMLElement;
-            clone.querySelectorAll("a[href*='artist.php']").forEach((e) => e.remove());
-            const query = clone.innerText ?? clone.textContent;
-            const endBracket = query.indexOf("]");
-            const dash = query.indexOf("-", endBracket);
-            return query.slice(dash + 1).trim();
-          },
-        },
-        title: {
-          selector: "div > h2",
-          filters: [(query: string) => query.slice(query.indexOf("]") + 1)],
-        },
-        category: {
-          selector: "div > h2",
-          // 第一个 [...] 对应分类
-          filters: [(query: string) => query.match(/\[([^\]]+)\]/)?.[1] || ""],
-        },
-
-        time: {
-          // <span title="15 years, 8 months, 1 week ago">May 12 2010, 19:08</span>
-          selector: "+tr span[title]",
-          filters: [{ name: "parseTime" }],
-        },
-      },
-    },
-    // Top 10
-    {
-      ...top10PageList,
-      selectors: {
-        ...top10PageList.selectors,
-        rows: {
-          ...top10PageList.selectors!.rows,
-          selector: "table.border tr:gt(0)",
-        },
-        size: { selector: ">td:eq(3)", filters: [{ name: "parseSize" }] },
-        completed: { selector: ">td:eq(4)", filters: [{ name: "parseNumber" }] },
-        seeders: { selector: ">td:eq(5)", filters: [{ name: "parseNumber" }] },
-        leechers: { selector: ">td:eq(6)", filters: [{ name: "parseNumber" }] },
-      },
-    },
-  ],
 
   noLoginAssert: {
     matchSelectors: ["a[href='login.php']"],

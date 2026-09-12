@@ -48,9 +48,7 @@ export const SchemaMetadata: Partial<ISiteMetadata> = {
   },
 
   detail: {
-    urlPattern: ["/details.php"],
     selectors: {
-      title: { selector: "div > h1" },
       link: { selector: "a[href^='download.php/']", attr: "href" },
     },
   },

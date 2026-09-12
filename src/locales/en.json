@@ -1,8 +1,4 @@
 {
-  "ContextMenuLinkPush": {
-    "invalidLink": "Invalid download link",
-    "keywordWarning": "When pushing links via right-click, some keyword features for download paths or labels may not work correctly!"
-  },
   "Debugger": {
     "addServerFirst": "Please add a server on the Set{serverType} page first",
     "confirmReset": "Are you sure you want to reset?",
@@ -21,7 +17,7 @@
     "outputSiteDefinition": "Output Site Definition",
     "outputSiteInstance": "Output Site Instance",
     "outputUserConfig": "Output User Config",
-    "pluginReset": "Plugin Reset",
+    "pluginReset": "Application Reset",
     "resetItems": {
       "clearDownloadHistory": "Clear Download History",
       "clearFaviconCache": "Clear Site Favicon Cache",
@@ -445,10 +441,10 @@
       "selectFile": "Select Backup File",
       "success": "Restored successfully",
       "title": "Restore from Backup File",
-      "versionWarning": "Backup data version is higher than the current extension version. Restoring may cause data incompatibility or loss. Continue?"
+      "versionWarning": "Backup data version is higher than the current application version. Restoring may cause data incompatibility or loss. Continue?"
     },
     "fields": {
-      "config": "Extension configuration (config)",
+      "config": "Application configuration (config)",
       "cookies": "Site cookies (cookies)",
       "downloadHistory": "Download history (downloadHistory)",
       "keepUploadTask": "Reseed tasks (keepUploadTask)",
@@ -483,16 +479,16 @@
       "localDownloadIgnoreInterval": "Ignore site download interval limit for local downloads",
       "localDownloadMethod": "Local Download Method",
       "localDownloadMethodOptions": {
-        "browser": "Browser Method",
-        "browserTip": "(RECOMMEND) Use the browser's download method provided by the extension to download directly",
-        "extension": "Extension Proxy",
-        "extensionTip": "The extension downloads the torrent in the background and proxies it to @:SetBase.download.localDownloadMethodOptions.browser for downloading",
-        "web": "Web Page",
-        "webTip": "Open the page corresponding to the download link (only applicable to the simplest method; if conditions are not met, it will fall back to @:SetBase.download.localDownloadMethodOptions.extension )"
+        "browser": "Native Download",
+        "browserTip": "(Recommended) Save files directly with the Tauri native download command",
+        "extension": "Application Relay",
+        "extensionTip": "Fetch and parse the torrent in the application before saving it locally",
+        "web": "Open Link",
+        "webTip": "Open the download link directly; unsupported requests fall back to application relay"
       },
       "localDownloadTitle": "Local Download",
       "pushDownloadServerTitle": "Push to Download Server",
-      "quickSendToClientNote": "When quick push is enabled, the plugin will perform the following default actions when pushing download tasks:<br />1. Flatten the downloader and download directory options for direct click-to-push.<br />2. When hovering over an option, the label list will temporarily open; clicking will additionally add label information.<br />3. All use local relay mode to push torrents, and basic settings like 'auto-start download' and downloader-specific configs are determined by downloader and site settings.",
+      "quickSendToClientNote": "When quick push is enabled, the application will perform the following default actions when pushing download tasks:<br />1. Flatten the downloader and download directory options for direct click-to-push.<br />2. When hovering over an option, the label list will temporarily open; clicking will additionally add label information.<br />3. All use local relay mode to push torrents, and basic settings like 'auto-start download' and downloader-specific configs are determined by downloader and site settings.",
       "saveDownloadHistory": "Save download history (Please do not disable this function unless necessary)",
       "saveLastDownloader": "Save the last used download server settings",
       "useQuickSendToClient": "Use quick push by default"
@@ -510,7 +506,7 @@
       "maxTagCountBeforeGroup": "Max tags shown before grouping (0 = unlimited)",
       "mediaQueueConcurrency": "Request Queue Concurrency",
       "mediaSearchLimit": "Number of search results per request",
-      "mediaSearchLimitMessage": "Please do not load too many search results at once. It's not optimized with virtual-scroll, which may cause the browser to freeze and affect the performance of the media server.",
+      "mediaSearchLimitMessage": "Please do not load too many search results at once. It's not optimized with virtual-scroll, which may cause the application to freeze and affect the performance of the media server.",
       "mediaServerSearchConfig": "Media Server Search Configuration",
       "quickSiteFilter": "Quick Site Filter In Search Page",
       "saveLastSearchFilter": "Save last used search filter",
@@ -524,49 +520,23 @@
     "tab": {
       "backup": "Backup & Restore",
       "download": "Download",
-      "native-bridge": "Native Bridge",
       "search-entity": "@:common.search",
       "social-information": "Social Rating",
       "ui": "Option UI",
       "user-info": "UserInfo"
     },
     "ui": {
-      "allowDragLink": "Allow dragging links to the sidebar button",
-      "allowExceptionSites": "Allow setting exception sites without sidebar (enable in site settings)",
-      "basicSettings": "Basic Settings",
       "changeLanguage": "Switch Language",
-      "confirmTwoStep": "Require two-step confirmation for batch copy, local download, etc. on torrent list pages",
-      "contentScript": "Content Script (Site Sidebar, etc.)",
-      "contentScriptWarning": "After enabling or disabling related features, save settings and refresh the site page for changes to take effect.",
-      "contextMenu": "Context Menu",
-      "contextMenuLinkPush": "Enable (download) link push",
-      "contextMenuSocialSearch": "Enable social link (douban, imdb) search",
-      "contextMenuTextSearch": "Enable selected text search",
       "displayMode": {
-        "auto": "Auto (Follow Browser or System)",
+        "auto": "Auto (Follow System)",
         "dark": "Dark Mode",
         "index": "UI display mode",
         "light": "Light Mode"
       },
-      "dragNote": "Dragged download links may not always be correctly recognized!",
-      "enableFadeEffect": "Enable fade-in effect (semi-transparent by default, shows on hover)",
-      "enableOnSocialSite": "Enable sidebar on social sites (e.g. Douban, IMDb)",
       "enableTableMultiSort": "Enable multi-column sorting for some tables",
-      "expandByDefault": "Expand sidebar button by default",
-      "respondDisplayMode": "Respond to plugin setting ",
       "saveTableBehavior": "Remember table header columns, sorting, pagination, etc.",
-      "showReleaseNote": "Show changelog window when plugin updates",
-      "sidebarFunctions": "Sidebar Functions",
-      "sidebarStyle": "Sidebar Style",
-      "socialSiteSearchBy": {
-        "chosen": "Let me choose",
-        "id": "Search by ID",
-        "imdb": "Search by IMDb Number",
-        "title": "Search by Main Title"
-      },
-      "socialSiteSearchLabel": "Social site search method",
-      "tableMultiSortNote": "Multi-column sorting: Click any table header field to start sorting, which will display the number \\\"1\\\" on the field. Click other fields sequentially to display \\\"2\\\", \\\"3\\\", indicating sorting priority. Click the same field again to toggle between ascending, descending, or cancel sorting. The sorting order is determined by these numbers, with smaller numbers having higher priority.",
-      "useLargeIcon": "Use large icon buttons"
+      "showReleaseNote": "Show changelog window when the application updates",
+      "tableMultiSortNote": "Multi-column sorting: Click any table header field to start sorting, which will display the number \\\"1\\\" on the field. Click other fields sequentially to display \\\"2\\\", \\\"3\\\", indicating sorting priority. Click the same field again to toggle between ascending, descending, or cancel sorting. The sorting order is determined by these numbers, with smaller numbers having higher priority."
     },
     "userInfo": {
       "afterTime": "Earliest daily refresh time",
@@ -669,41 +639,9 @@
     },
     "siteFilter": {
       "excludedSites": "Excluded Sites",
-      "excludedSitesHint": "If a site is excluded, this downloader will not be shown on the site page (does not apply to the aggregated search page)",
+      "excludedSitesHint": "Excluded downloaders are hidden from push options for the corresponding sites.",
       "noSites": "No sites added yet",
       "title": "Set site filter for downloader [{0}] (exclusion)"
-    }
-  },
-  "SetNativeBridge": {
-    "bridge": {
-      "enabled": "Enable Native Bridge",
-      "status": {
-        "connected": "Connected",
-        "connecting": "Connecting...",
-        "disabled": "Disabled",
-        "error": "Error",
-        "no-permission": "No Permission",
-        "retrying": "Retrying..."
-      },
-      "testConnection": "Test Connection",
-      "title": "Bridge Control"
-    },
-    "info": {
-      "cliLink": "ptd-cli",
-      "cliRequired": "The external CLI tool must be installed for this feature to work. Native bridge is not available on mobile platforms. See {0} for installation instructions.",
-      "description": "The native bridge allows the PT-Depiler CLI tool to communicate with this extension. It requires the CLI tool to be installed separately on your computer.",
-      "privacy": "When enabled, the native bridge allows the locally installed CLI tool to access extension data including site configuration, search results, download history, user info, and downloader status. All communication is local (between browser and local process) — no data is sent to remote servers. You can disable this feature or revoke the permission at any time.",
-      "setupCommand": "Run the following command to register this extension with the CLI tool:",
-      "setupHint": "After running the command, restart the browser or click Test Connection.",
-      "title": "About Native Bridge"
-    },
-    "permission": {
-      "grant": "Grant Permission",
-      "grantFailed": "Permission request was denied",
-      "granted": "Permission Granted",
-      "notGranted": "Permission Not Granted",
-      "revoke": "Revoke Permission",
-      "title": "Permission"
     }
   },
   "SetSearchSolution": {
@@ -749,9 +687,9 @@
     },
     "Editor": {
       "downloadInterval": "Download Interval",
-      "downloadIntervalHint": "Affects the download interval for this site (for safety, the plugin will not strictly follow this setting; the actual interval is always slightly greater than or equal to the set interval)",
+      "downloadIntervalHint": "Affects the download interval for this site (for safety, the application will not strictly follow this setting; the actual interval is always slightly greater than or equal to the set interval)",
       "downloadLinkSuffix": "Download Link Suffix",
-      "downloadLinkSuffixExample": "E.g. if the plugin gets https://example.com/download.php?id=1 and you set &passkey=xxxx, the final download link will be https://example.com/download.php?id=1&passkey=xxxx. Leave this empty by default, and only fill in the passkey if the correct download link cannot be obtained.",
+      "downloadLinkSuffixExample": "E.g. if the application gets https://example.com/download.php?id=1 and you set &passkey=xxxx, the final download link will be https://example.com/download.php?id=1&passkey=xxxx. Leave this empty by default, and only fill in the passkey if the correct download link cannot be obtained.",
       "downloadLinkSuffixHint": "This field will be automatically appended to the site's download links",
       "otherSettings": "Other Settings",
       "requestTimeout": "Request Timeout",
@@ -773,7 +711,6 @@
     },
     "common": {
       "aka": "AKA",
-      "allowContentScript": "Load Content Script",
       "allowQueryUserInfo": "Allow access USP",
       "allowSearch": "Allow Search",
       "groups": "Site Groups",
@@ -824,7 +761,7 @@
       "oneClickImport": "One-Click Import Sites",
       "reBuildMap": "Rebuild Site Cache",
       "settingNote": [
-        "Only the configured site will display the plugin icon and the corresponding function;",
+        "Only configured sites will expose the corresponding features;",
         "the offline site will no longer participate in the search and information acquisition;"
       ],
       "table": {
@@ -833,7 +770,7 @@
       }
     },
     "oneClickImportDialog": {
-      "alert1": "This operation will attempt to import the sites you select with default configurations. Please ensure you have logged into these sites in your browser. The import process cannot be interrupted, please wait patiently.",
+      "alert1": "This operation will attempt to import the sites you select with default configurations. Please ensure the application has synchronized login cookies for these sites. The import process cannot be interrupted, please wait patiently.",
       "alert2": "List of unadded sites",
       "importComplete": "One-click import complete, successfully added {count} sites",
       "stats": "Selected {count} sites, added {success} sites, failed to add {failed} sites.",
@@ -1003,41 +940,13 @@
     "type": "Type",
     "username": "Username",
     "version": "Version",
-    "visit": "Visit"
+    "visit": "Visit",
+    "appName": "PT Depiler"
   },
   "connectCheck": {
     "default": "Check Connect",
     "error": "Connect Failed! Check Form Input or Remote Server",
     "success": "Connect Successful! You can enter next step."
-  },
-  "contentScript": {
-    "AdvanceListModuleDialog": {
-      "selectNotSeeding": "Select not downloaded",
-      "selectSeeders": "Select seeding rows",
-      "selectedInfo": "Selected: {0} torrents, Total size: {1}",
-      "title": "Customize batch actions for {0} torrents"
-    },
-    "SocialSiteParseResultsDialog": {
-      "defaultSeasonTitle": "Season",
-      "searchEntryTitle": "Search {title}",
-      "searchExternalId": "Search External ID",
-      "searchId": "Search ID",
-      "searchPlan": "Search Plan",
-      "searchTitle": "Search Title",
-      "title": "Quick Search"
-    },
-    "advanceList": "Advanced List",
-    "cannotParseDetailLink": "Cannot parse torrent link on this page",
-    "copyLink": "Copy Link",
-    "copyLinkFailed": "Failed to copy download link",
-    "copyLinkSuccess": "Download link copied to clipboard",
-    "noTorrentParsed": "No torrents found on this page",
-    "openPTD": "Open PTD",
-    "parsePageFailed": "Page parsing failed",
-    "parseResultEmpty": "Failed to parse results",
-    "pushTo": "Push to...",
-    "pushToDefault": "Push to Default Downloader",
-    "quickSearch": "Quick Search"
   },
   "downloaderLabel": {
     "localDownload": "Local Download"
@@ -1064,9 +973,9 @@
       },
       "navBarTip": "Click to show/hide the navigation bar",
       "searchPlan": {
-        "all": "@:manifest.searchPlanAll",
-        "default": "@:manifest.searchPlanDefault",
-        "singleSite": "@:manifest.searchPlanSingleSite"
+        "all": "All Sites",
+        "default": "Default",
+        "singleSite": "Single Site"
       },
       "searchTip": "Input keyword, IMDb numbers to search",
       "wiki": "Wiki",
@@ -1078,7 +987,7 @@
       "currentVersion": " (current version)",
       "faq": "FAQ",
       "startUsing": "Get Started",
-      "title": "Welcome to {extName}",
+      "title": "Welcome to {appName}",
       "wiki": "Wiki Help"
     }
   },
@@ -1107,27 +1016,6 @@
     "uploaded": "Uploaded",
     "uploads": "Uploaded Torrents"
   },
-  "manifest": {
-    "contextMenuSearch": "Using PT Depiler to Search for \"%s\" related torrents",
-    "contextMenuSearchInDefault": "Search in the default plan",
-    "contextMenuSearchInSite": "Search in the specified site",
-    "contextMenuSearchInSolution": "Search in the specified plan",
-    "contextMenuSearchInThisSite": "Search in this site",
-    "contextMenuSearchWithDouban": "Using PT Depiler to Search This Douban ID",
-    "contextMenuSearchWithIMDb": "Using PT Depiler to Search This IMDb ID",
-    "contextMenuSendToDownloader": "Using PT Depiler to Download link",
-    "contextMenuSendToDownloaderAdvanced": "Advanced push",
-    "contextMenuSendToDownloaderDefaultFolder": "Default path",
-    "contextMenuSendToDownloaderIn": "Push to $1 -> $2",
-    "extDesc": "PT Depiler",
-    "extName": "PT Depiler",
-    "notificationSendLinkToDownloaderFailure": "Failed to send the link to the downloader [$1]",
-    "notificationSendLinkToDownloaderSuccess": "Successfully sent the link to the downloader [$1]",
-    "omniboxSearch": "Search $2 in [ $1 ]",
-    "searchPlanAll": "All Sites",
-    "searchPlanDefault": "Default",
-    "searchPlanSingleSite": "Single Site"
-  },
   "ptppSettings": {
     "RestorePtppUserDataDialog": {
       "importCancelled": "Import operation cancelled.",
@@ -1152,7 +1040,7 @@
     "importStep4": "Upload the zip package or the extracted <code>userdatas.json</code> file to the input box below.",
     "invalidFileFormat": "Invalid file format, please check if the backup was exported correctly (with the backup encryption feature turned off).",
     "randomGenTitle": "Generate Randomly",
-    "saveKeyNotice": "Note: The key is only saved in the current browser and will not be backed up, please keep it safe; data cannot be recovered if the key is lost after encryption. Leave blank for no encryption.",
+    "saveKeyNotice": "Note: The key is only saved in the local application and will not be backed up. Keep it safe; encrypted data cannot be recovered if the key is lost. Leave blank for no encryption.",
     "selectBackupFile": "Select PTPP Backup File",
     "undoKeyTitle": "Restore previous key"
   },

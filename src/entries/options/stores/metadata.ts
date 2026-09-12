@@ -387,7 +387,7 @@ export const useMetadataStore = defineStore("metadata", {
 
     /**
      * 在添加、编辑站点时调用，重新生成 host 对站点的映射，
-     * 便于 content-script 等其他地方通过 (await extStorage.getItem('metadata')).siteHostMap[host] 获取站点 ID
+     * 供 Tauri 网络适配器、备份恢复和下载器导入按域名识别站点。
      */
     async buildSiteHostMap() {
       const siteHostMap: Record<TSiteHost, TSiteID> = {};

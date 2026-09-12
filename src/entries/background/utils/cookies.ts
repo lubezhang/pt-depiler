@@ -1,17 +1,15 @@
 /**
- * Tauri 迁移：cookie 读写对接 Rust 命令（get_cookies/get_cookie/set_cookie/remove_cookie）。
+ * Tauri 迁移：cookie 读写对接 Rust 命令（get_cookies/set_cookie）。
  *
- * 原扩展用 chrome.cookies API 操作浏览器全局 cookie jar。Tauri 下 Rust 侧用单一全局
- * cookie_store（reqwest + cookie_store crate），cookie 按 domain 隔离，ptd_fetch 请求自动带
- * cookie、set-cookie 自动写入。此处的 handler 供备份/恢复、checkAndExtendCookies、site 包
- * 获取 cookie 使用，通过 invoke 调用 Rust 命令并在 CookieInfo 与 chrome.cookies.Cookie 间转换。
+ * Rust 侧使用单一全局 cookie_store（reqwest + cookie_store crate），cookie 按 domain 隔离，
+ * ptd_fetch 请求自动携带 cookie，并自动写入 set-cookie。
  */
 import { add, differenceInDays } from "date-fns";
 import { invoke } from "@tauri-apps/api/core";
 
 import { onMessage, sendMessage } from "@/messages.ts";
 import { extStorage } from "@/storage.ts";
-import { buildCookieUrl, redactCookieUrl, toChromeCookie, toCookieInfo, type CookieInfo } from "./cookieCore.ts";
+import { redactCookieUrl, toAppCookie, toCookieInfo, type CookieInfo } from "./cookieCore.ts";
 
 /** 计算cookie的剩余有效期（以天为单位） */
 export function calculateRemainingDays(expirationDate?: number): number {
@@ -35,27 +33,11 @@ onMessage("getAllCookies", async ({ data }) => {
     }
   }
   const cookies = await invoke<CookieInfo[]>("get_cookies", { domain });
-  return cookies.map(toChromeCookie);
-});
-
-onMessage("getCookie", async ({ data }) => {
-  const c = await invoke<CookieInfo | null>("get_cookie", { url: data.url, name: data.name });
-  return c ? toChromeCookie(c) : null;
+  return cookies.map(toAppCookie);
 });
 
 onMessage("setCookie", async ({ data }) => {
   await invoke("set_cookie", { cookie: toCookieInfo(data) });
-});
-
-// @ts-ignore - CookieDetails | SetDetails 联合类型访问与返回值类型不完美，运行时正确
-onMessage("removeCookie", async ({ data }) => {
-  const detail = data as chrome.cookies.SetDetails;
-  const url =
-    typeof data.url !== "undefined"
-      ? data.url
-      : buildCookieUrl(detail.secure ?? true, detail.domain!, detail.path ?? "/");
-  await invoke("remove_cookie", { url, name: data.name! });
-  return data;
 });
 
 /**

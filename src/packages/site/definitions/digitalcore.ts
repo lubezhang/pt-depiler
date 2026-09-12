@@ -4,17 +4,6 @@ import { buildCategoryOptionsFromDict } from "../utils";
 import Rartracker from "../schemas/Rartracker";
 import { SchemaMetadata } from "../schemas/Rartracker";
 
-const commonDocumentSelectors = {
-  rows: { selector: "torrents-table[torrents] > table > tbody > tr" },
-  id: {
-    selector: "a[title]",
-    attr: "href",
-    filters: [{ name: "split", args: ["/", 2] }],
-  },
-  url: { selector: "a[title]", attr: "href" },
-  title: { selector: "a[title]", attr: "title" },
-};
-
 const levelIdMap: Record<number, string> = {
   0: "Rogue",
   10: "Sentinel",
@@ -149,36 +138,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [/\/(alltorrents|movies|tvseries|games|music|apps|xxx|other|search)(\?.*)?$/],
-      mergeSearchSelectors: false,
-      selectors: {
-        time: { selector: "td:nth-child(6)", filters: [{ name: "parseTime" }] },
-        size: { selector: "td:nth-child(7)", filters: [{ name: "parseSize" }] },
-        completed: { selector: "td:nth-child(8)", filters: [{ name: "parseNumber" }] },
-        seeders: { selector: "td:nth-child(9)" },
-        leechers: { selector: "td:nth-child(10)" },
-        ...commonDocumentSelectors,
-      },
-    },
-    {
-      urlPattern: ["/toplists/torrents"],
-      mergeSearchSelectors: false,
-      selectors: {
-        completed: { selector: "td:nth-child(4)", filters: [{ name: "parseNumber" }] },
-        seeders: { selector: "td:nth-child(5)" },
-        leechers: { selector: "td:nth-child(6)" },
-        ...commonDocumentSelectors,
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: [/\/torrent\/\d+\/.*$/],
     selectors: {
-      id: { selector: "torrent[viewing-torrent]", attr: "viewing-torrent" },
-      title: { selector: "div.ellipsis > span" },
       link: { selector: "div[ng-hide*='vm.torrent'] > a:nth-child(1)", attr: "href" },
     },
   },

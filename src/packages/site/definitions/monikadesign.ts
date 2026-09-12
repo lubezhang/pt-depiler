@@ -224,13 +224,6 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    ...SchemaMetadata.list!,
-    {
-      urlPattern: ["/torrents/airing/"],
-    },
-  ],
-
   userInfo: {
     ...SchemaMetadata.userInfo!,
     selectors: {

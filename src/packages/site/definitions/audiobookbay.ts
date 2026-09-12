@@ -156,16 +156,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      excludeUrlPattern: ["/abss/"],
-    },
-  ],
-
   detail: {
-    urlPattern: ["/abss/"],
     selectors: {
-      title: titleSelector,
       link: {
         selector: ":self",
         elementProcess: (doc: Document) => {

@@ -144,13 +144,6 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    ...SchemaMetadata.list!,
-    {
-      urlPattern: ["/speedup.php"], // additional page
-    },
-  ],
-
   userInfo: {
     ...SchemaMetadata.userInfo,
     selectors: {

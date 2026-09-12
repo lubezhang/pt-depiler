@@ -241,23 +241,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  // TODO userInfo 中的messageCount 等其他字段
-
-  list: [
-    {
-      urlPattern: ["/(index.php|torrents-search.php)$"],
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrents-details\\.php\\?id=\\d+"],
     selectors: {
-      title: { selector: ["div.myFrame td:contains('Name:') + td"] },
-      id: {
-        selector: ["a[href*='download.php?id=']"],
-        attr: "href",
-        filters: [(query: string) => query.match(/id=(\d+)/)![1]],
-      },
       link: {
         selector: ["a[href*='download.php?id=']"],
         attr: "href",

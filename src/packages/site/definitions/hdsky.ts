@@ -107,16 +107,10 @@ const oldUserLevelRequirements = newUserLevelRequirements.map((level) => {
   return omit(level, ["bonus"]);
 }) as ILevelRequirement[];
 
-const baseIdSelector =
-  __BROWSER__ === "firefox"
-    ? {
-        selector: 'a[href*="download.php"][href*="id="]',
-        attr: "href",
-      }
-    : {
-        selector: 'form[action*="download.php"]:first',
-        attr: "action",
-      };
+const baseIdSelector = {
+  selector: 'form[action*="download.php"]:first',
+  attr: "action",
+};
 
 export const siteMetadata: ISiteMetadata = {
   ...SchemaMetadata,
@@ -361,7 +355,7 @@ export default class Hdsky extends NexusPHP {
       }
     }
 
-    // 为 content-script 的 drag 生成 url，以免 super 无法获取到 torrent.url 进而无法生成 link
+    // 搜索结果缺少详情页地址时，根据种子 ID 补全，以便父类重新获取下载链接。
     if (torrent.id && !torrent.url) {
       torrent.url = urlJoin(this.url, `/details.php?id=${torrent.id}`);
     }

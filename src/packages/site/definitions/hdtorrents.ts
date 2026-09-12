@@ -172,9 +172,7 @@ export const siteMetadata: ISiteMetadata = {
   },
 
   detail: {
-    urlPattern: ["/details.php"],
     selectors: {
-      title: { selector: "a[href*='download.php']:first" },
       link: { selector: "a[href*='download.php']:first", attr: "href" },
     },
   },

@@ -18,19 +18,6 @@ export async function getKeepUploadTasks(): Promise<IKeepUploadTask[]> {
 onMessage("getKeepUploadTasks", getKeepUploadTasks);
 
 /**
- * 根据ID获取辅种任务
- */
-export async function getKeepUploadTaskById(taskId: TKeepUploadTaskKey): Promise<IKeepUploadTask | undefined> {
-  const tasks = await sendMessage("getExtStorage", STORAGE_KEY);
-  return (tasks as TKeepUploadTaskStorageSchema)?.[taskId];
-}
-
-onMessage("getKeepUploadTaskById", async ({ data: taskId }) => {
-  const task = await getKeepUploadTaskById(taskId);
-  return task!;
-});
-
-/**
  * 创建辅种任务
  */
 export async function createKeepUploadTask(task: IKeepUploadTask): Promise<void> {

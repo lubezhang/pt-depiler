@@ -136,7 +136,7 @@ function doRestore() {
     return;
   }
 
-  let warnRestore = compareVersion(restoreData.value.manifest.version, __EXT_VERSION__) == 1;
+  let warnRestore = compareVersion(restoreData.value.manifest.version, __APP_VERSION__) == 1;
   if (!warnRestore || confirm(t("SetBackup.RestoreDialog.versionWarning"))) {
     sendMessage("restoreBackupData", { restoreData: restoreData.value!, restoreOptions: restoreOptions.value })
       .then(() => {

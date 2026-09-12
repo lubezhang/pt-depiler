@@ -1,4 +1,8 @@
-import Gazelle, { SchemaMetadata, GazelleUtils, commonPagesList, detailPageList } from "../schemas/Gazelle.ts";
+import Gazelle, {
+  SchemaMetadata,
+  GazelleUtils,
+  detailPageSelectors as gazelleDetailPageSelectors,
+} from "../schemas/Gazelle.ts";
 import { ISiteMetadata, ITorrent, ISearchInput, ETorrentStatus } from "../types.ts";
 import { buildCategoryOptionsFromList } from "../utils.ts";
 
@@ -20,10 +24,10 @@ const catClassMap = antCategories.reduce<Record<string, string>>((map, item) => 
 const categoryOptions = antCategories.map(({ name, value }) => ({ name, value }));
 
 const detailPageSelectors = {
-  ...detailPageList.selectors,
+  ...gazelleDetailPageSelectors,
   category: { text: "N/A" }, // 没有相关信息
   time: {
-    ...detailPageList!.selectors!.time!,
+    ...gazelleDetailPageSelectors.time,
     selector: ["+ tr span.time[title]", "+ tr span.time"],
     switchFilters: {
       "+ tr span.time": [
@@ -172,32 +176,6 @@ export const siteMetadata: ISiteMetadata = {
       ext_imdb: { selector: "a[href*='imdb.com/title/tt']", attr: "href", filters: [{ name: "extImdbId" }] },
     },
   },
-
-  list: [
-    {
-      ...commonPagesList,
-      urlPattern: [...commonPagesList.urlPattern!, "/artist\\.php\\?tmdb=\\d+"],
-      selectors: {
-        time: {
-          text: 0,
-          selector: "span.time",
-          filters: [
-            { name: "parseTTL" },
-            (ts: number) => {
-              const offsetMinutes = new Date().getTimezoneOffset();
-              const offsetMs = offsetMinutes * 60 * 1000;
-              return ts + offsetMs;
-            },
-          ],
-        },
-      },
-    },
-    {
-      ...detailPageList,
-      selectors: detailPageSelectors,
-    },
-    // Top 10 不显示种子
-  ],
 
   userInfo: {
     pickLast: ["id", "name", "joinTime"],

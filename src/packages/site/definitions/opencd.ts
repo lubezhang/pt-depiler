@@ -253,26 +253,8 @@ export const siteMetadata: ISiteMetadata = {
 
   detail: {
     // 该站详情页为 /plugin_details.php?id=数字
-    urlPattern: ["/plugin_details.php"],
 
     selectors: {
-      id: {
-        selector: ":self",
-        elementProcess: (element: Document) => {
-          // 从 URL 中获取 ID，例如 /plugin_details.php?id=179082
-          const url = element.URL;
-          const idMatch = url.match(/id=(\d+)/);
-          if (idMatch && idMatch.length >= 2) {
-            return idMatch[1];
-          }
-          return undefined;
-        },
-      },
-      title: {
-        // 音乐站title不适合作为搜索词
-        selector: 'td.rowtitle:contains("專輯名稱：") + td',
-        attr: "title",
-      },
       link: {
         selector: ['a[href*="download.php?id="][href*="&passkey="]'],
         attr: "href",

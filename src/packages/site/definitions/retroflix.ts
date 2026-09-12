@@ -159,15 +159,9 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [{ urlPattern: ["/browse"], excludeUrlPattern: ["/browse/t/"] }],
-
   detail: {
-    urlPattern: ["/browse/t/"],
     selectors: {
       ...SchemaMetadata.detail!.selectors!,
-      title: {
-        selector: "table h3",
-      },
     },
   },
 

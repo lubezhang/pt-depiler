@@ -36,7 +36,6 @@
     "build:watch": "vite build --watch --mode development --minify false",
     "action:upload_telegram": "tsx vite/sendToTgChannel.ts",
     "release:changelog": "conventional-changelog -p angular && git add CHANGELOG.md",
-    "prepare": "husky",
     "verify:desktop": "pnpm format:check && pnpm check && pnpm test && pnpm build:dist && cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml && pnpm tauri build --debug --no-bundle"
   },
   "engines": {
@@ -46,14 +45,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.2",
-    "@tauri-apps/plugin-global-shortcut": "^2.3.2",
-    "@tauri-apps/plugin-notification": "^2.3.3",
-    "@tauri-apps/plugin-store": "^2.4.4",
-    "@vueuse/components": "^14.3.0",
     "@vueuse/core": "^14.3.0",
-    "@webext-core/job-scheduler": "^1.1.0",
-    "@webext-core/messaging": "^3.0.2",
-    "@webext-core/storage": "^1.2.1",
     "axios": "^1.18.1",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.4.0",
@@ -83,9 +75,7 @@
     "webdav": "^5.10.0"
   },
   "devDependencies": {
-    "@intlify/unplugin-vue-i18n": "^11.2.4",
     "@tauri-apps/cli": "^2.11.4",
-    "@types/chrome": "^0.2.2",
     "@types/crypto-js": "^4.2.2",
     "@types/file-saver": "^2.0.7",
     "@types/git-rev-sync": "^2.0.2",
@@ -94,20 +84,15 @@
     "@types/sizzle": "^2.3.10",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/test-utils": "^2.5.0",
-    "cross-env": "^10.1.0",
     "git-rev-sync": "^3.0.2",
-    "husky": "^9.1.7",
     "jsdom": "^26.1.0",
-    "lint-staged": "^17.0.8",
     "prettier": "^3.9.5",
     "sass": "^1.101.0",
     "tsx": "^4.23.0",
     "typescript": "~6.0.3",
     "vite": "^6.4.2",
     "vite-plugin-node-polyfills": "^0.28.0",
-    "vite-plugin-vue-devtools": "^8.1.5",
     "vite-plugin-vuetify": "^2.1.3",
-    "vite-plugin-web-extension": "4.5.1",
     "vitest": "^3.2.7",
     "vue-tsc": "^3.3.7"
   },
@@ -118,10 +103,5 @@
     "bracketSpacing": true,
     "vueIndentScriptAndStyle": false,
     "endOfLine": "lf"
-  },
-  "lint-staged": {
-    "*.{js,ts,json,vue,html,css,scss}": [
-      "prettier --write "
-    ]
   }
 }

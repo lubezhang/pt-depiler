@@ -197,27 +197,9 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/browse\\.php", "/current\\.php\\?id=\\d+", "/history\\.php\\?id=\\d+"],
-      selectors: {
-        keywords: {
-          selector: 'input[name="search"]',
-          elementProcess: (element: HTMLInputElement) => element.value,
-        },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/details\\.php\\?id=\\d+"],
     selectors: {
-      title: { selector: "table.main h1:first" },
       link: { selector: ["a.index[href*='down.php']", 'a[href^="/down.php/"]'], attr: "href" },
-      size: {
-        selector: "td.heading:contains('Size') + td",
-        filters: [{ name: "split", args: ["(", 0] }, { name: "parseSize" }],
-      },
     },
   },
 

@@ -132,55 +132,24 @@ const baseTimeSelector = {
 
 const detailAttr = "isDetailPage";
 
-type TList = Required<ISiteMetadata>["list"][number];
+export const detailPageSelectors = {
+  // 从整个页面获取种子组信息
+  keywords: { selector: ["span[dir='ltr']"] },
+  title: { selector: ["div > h2"] },
 
-export const commonPagesList: TList = {
-  urlPattern: [/\/torrents\.php(?!.*(?:\bid=|torrentid=))/, "/collages\\.php\\?id=\\d+", "/artist\\.php\\?id=\\d+"],
-};
-
-export const detailPageList: TList = {
-  urlPattern: [/\/torrents\.php\?(?:.*&)?(\bid|torrentid)=\d+/],
-  selectors: {
-    // 从整个页面获取种子组信息
-    keywords: { selector: ["span[dir='ltr']"] },
-    title: { selector: ["div > h2"] },
-
-    rows: {
-      ...baseRowSelector,
-      // 向第一个 row 添加属性，用于表示匹配到了详情页
-      filter: (rows: HTMLElement[] | null): HTMLElement[] | null => {
-        if (Array.isArray(rows) && rows.length > 0) {
-          rows[0].dataset[detailAttr] = "1";
-        }
-        return rows;
-      },
-    },
-    time: {
-      ...baseTimeSelector,
-      selector: "+tr span.time", // 在下一个 tr 里（tr.torrentdetails)
+  rows: {
+    ...baseRowSelector,
+    // 向第一个 row 添加属性，用于表示匹配到了详情页
+    filter: (rows: HTMLElement[] | null): HTMLElement[] | null => {
+      if (Array.isArray(rows) && rows.length > 0) {
+        rows[0].dataset[detailAttr] = "1";
+      }
+      return rows;
     },
   },
-};
-
-export const top10PageList: TList = {
-  urlPattern: ["/top10\\.php"],
-  excludeUrlPattern: [/\/top10\.php\?type=(?!torrents\b).*/], // 只解析种子 Top 10
-  selectors: {
-    rows: {
-      ...baseRowSelector,
-      /**
-       * 不同站点的 Top 10 种子行可能使用不同的 class，但基本上都是单种行样式
-       * 为了保证这些行都能被搜索方法解析，统一替换为单种行的 class
-       */
-      filter: (rows: HTMLElement[] | null): HTMLElement[] | null => {
-        if (Array.isArray(rows)) {
-          rows.forEach((row) => {
-            row.className = "torrent";
-          });
-        }
-        return rows;
-      },
-    },
+  time: {
+    ...baseTimeSelector,
+    selector: "+tr span.time", // 在下一个 tr 里（tr.torrentdetails)
   },
 };
 
@@ -250,18 +219,6 @@ export const SchemaMetadata: Partial<ISiteMetadata> = {
     },
   },
 
-  list: [
-    {
-      ...commonPagesList,
-    },
-    {
-      ...detailPageList,
-    },
-    {
-      ...top10PageList,
-    },
-  ],
-
   userInfo: {
     pickLast: ["id"],
     process: [
@@ -272,9 +229,7 @@ export const SchemaMetadata: Partial<ISiteMetadata> = {
       {
         requestConfig: {
           url: "/user.php",
-          params: {
-            /* id: flushUserInfo.id */
-          },
+          params: {/* id: flushUserInfo.id */},
           responseType: "document",
         },
         assertion: { id: "params.id" },
@@ -526,7 +481,7 @@ export default class Gazelle extends GazelleBase {
     }
 
     // 如果是详情页，直接返回当前种子组的种子
-    // 这个属性由 detailPageList.rows.filter 负责添加
+    // 这个属性由 detailPageSelectors.rows.filter 负责添加
     if (trs[0].dataset[detailAttr] === "1") {
       return this.transformGroupTorrents(doc.documentElement, trs, {
         keywords,

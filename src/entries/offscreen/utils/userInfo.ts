@@ -108,8 +108,6 @@ export async function setSiteLastUserInfo(userData: IUserInfo) {
   });
 }
 
-onMessage("setSiteLastUserInfo", async ({ data: userData }) => await setSiteLastUserInfo(userData));
-
 onMessage("getSiteUserInfo", async ({ data: siteId }) => {
   const userInfoStore = ((await sendMessage("getExtStorage", "userInfo")) ?? {}) as TUserInfoStorageSchema;
   return userInfoStore?.[siteId] ?? {};

@@ -187,9 +187,7 @@ export const siteMetadata: ISiteMetadata = {
   },
 
   detail: {
-    urlPattern: [/-\d+\//],
     selectors: {
-      title: { selector: "h1.card-title:first" },
       link: { text: "N/A" }, // 后续方法中会获取到正确链接
     },
   },
@@ -212,17 +210,6 @@ export default class ExtTorrents extends BittorrentSite {
       ...torrent,
       link: `${pageToken}|${csrfToken}`, // 后续方法中会获取到正确链接
     }));
-  }
-
-  public override async transformDetailPage(doc: Document): Promise<ITorrent> {
-    const torrent = await super.transformDetailPage(doc);
-    torrent.id = parseId(torrent.url!);
-
-    const pageToken = this.extractWindowVar(Sizzle(injectScriptSelector, doc)[0], "pageToken")!;
-    const csrfToken = this.extractWindowVar(Sizzle(`${injectScriptSelector} + script`, doc)[0], "csrfToken")!;
-    torrent.link = (await this.getTorrentMagnet({ id: torrent.id as number, pageToken, csrfToken })) ?? "";
-
-    return torrent;
   }
 
   public override async getTorrentDownloadLink(torrent: ITorrent): Promise<string> {

@@ -51,10 +51,3 @@ export async function retrieveStore(store: keyof IExtensionStorageSchema, keyPat
   const metadataStore = (await sendMessage("getExtStorage", store)) as IMetadataPiniaStorageSchema;
   return get(metadataStore, keyPath, null);
 }
-
-/**
- * 允许调用来获取获取单个 cookie 信息
- */
-export async function cookie(detail: chrome.cookies.CookieDetails): Promise<chrome.cookies.Cookie | null> {
-  return await sendMessage("getCookie", detail);
-}

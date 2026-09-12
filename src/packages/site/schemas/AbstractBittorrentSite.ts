@@ -21,8 +21,6 @@ import {
   ISiteUserConfig,
   TSiteUrl,
   ISearchEntryRequestConfig,
-  IParsedTorrentListPage,
-  TSchemaMetadataListSelectors,
   ETorrentStatus,
 } from "../types";
 import {
@@ -646,116 +644,6 @@ export default class BittorrentSite {
     searchConfig: ISearchInput,
   ): ITorrent {
     return torrent;
-  }
-
-  /**
-   * 此方法主要在 content-script 中调用，用于在种子列表页将传入的 Document 转换为种子列表和关键词
-   * @param doc
-   */
-  public async transformListPage(doc: Document): Promise<IParsedTorrentListPage> {
-    const retData = { keywords: "", torrents: [] } as IParsedTorrentListPage;
-
-    const parsedListPageUrl = doc.URL || location.href; // 获取当前页面的 URL
-
-    const searchEntry: { selectors: TSchemaMetadataListSelectors } = { selectors: {}, ...(this.metadata.search ?? {}) };
-
-    // 使用 list 中定义的 selectors 覆盖掉 search 中的 selectors
-    for (const list of this.metadata.list ?? []) {
-      const { urlPattern: listUrlPattern = [], selectors: listSelectors = {}, mergeSearchSelectors = true } = list;
-      if (listUrlPattern.some((pattern) => new RegExp(pattern!, "i").test(parsedListPageUrl))) {
-        searchEntry.selectors = { ...(mergeSearchSelectors ? searchEntry.selectors : {}), ...listSelectors };
-        break; // 找到匹配的 list 后，直接跳出循环
-      }
-    }
-
-    // 如果有 keywords 选择器，则获取当前搜索页的关键词
-    if (searchEntry.selectors.keywords) {
-      retData.keywords = this.getFieldData(doc, searchEntry.selectors.keywords as IElementQuery);
-      delete searchEntry.selectors.keywords; // 删除 keywords 选择器，避免污染后续的种子解析
-    } else {
-      // 参照 searchEntry 中的 keywordPath 来获取关键词
-      const keywordPath = (searchEntry as ISiteMetadata["search"])!.keywordPath || "params.keywords";
-      const [keywordField, keywordParams] = keywordPath.split(".");
-
-      // 首先尝试使用 getFieldData 获取关键词
-      retData.keywords = this.getFieldData(doc, {
-        selector: [
-          keywordField === "params" ? `input[name="${keywordParams}"]` : false,
-          keywordField === "data" ? `form[method="post" i] input[name="${keywordField}"]` : false,
-        ].filter(Boolean) as string[],
-        elementProcess: (el: HTMLInputElement) => el.value,
-        text: "",
-      });
-
-      // 如果没有获取到关键词，则尝试从 URL 中解析
-      if (retData.keywords === "") {
-        const urlParams = new URLSearchParams(parsedListPageUrl.split("?")[1] ?? "");
-        for (const keywordParam of [keywordParams, "search", "keywords", "keyword", "q"].filter(Boolean)) {
-          // 尝试从 URL 中获取关键词
-          if (urlParams.has(keywordParam)) {
-            retData.keywords = urlParams.get(keywordParam) || "";
-            break;
-          }
-        }
-      }
-    }
-
-    try {
-      // 将其委托到 transformSearchPage 方法中进行处理
-      retData.torrents = await this.transformSearchPage(doc, {
-        searchEntry,
-        requestConfig: { url: parsedListPageUrl },
-      });
-    } catch (e) {
-      console.error(`[PTD] site '${this.name}' transformListPage Error:`, e);
-    }
-
-    return retData;
-  }
-
-  /**
-   * 此方法主要在 content-script 中调用，用于将传入的 Document 转换为种子列表
-   * @param doc
-   */
-  public async transformDetailPage(doc: Document): Promise<ITorrent> {
-    let torrent: Partial<ITorrent> = { site: this.metadata.id };
-    const parsedDetailsPage = doc.cloneNode(true) as Document; // 克隆一份文档，避免污染原始文档
-
-    // 首先使用selectors来尝试获取种子详情
-    const detailsSelectors = this.metadata.detail?.selectors || {};
-    torrent = toMerged(torrent, this.getFieldsData(parsedDetailsPage, detailsSelectors));
-
-    // 如果未获取到 url，则 url 会被自动设置为 doc.URL || location.href
-    if (!torrent.url) {
-      torrent.url = parsedDetailsPage.URL || location.href; // 如果没有 url，则使用当前页面的 URL
-    }
-
-    // 如果未获取到 id，且 url 中有 `&id=` 或者 `&tid=` 字段，则会被自动解析为 id
-    if (!torrent.id) {
-      const urlParams = new URLSearchParams(torrent.url.split("?")[1] ?? "");
-      for (const idParam of ["tid", "id"]) {
-        // 尝试从 URL 中获取关键词
-        if (urlParams.has(idParam)) {
-          torrent.id = urlParams.get(idParam) || "";
-          break;
-        }
-      }
-
-      // 如果还是没有 id，则使用 url 作为 id
-      if (!torrent.id) {
-        torrent.id = torrent.url;
-      }
-    }
-
-    if (!torrent.title) {
-      torrent.title = this.getFieldData(parsedDetailsPage, { text: "", selector: ["html > body > title"] });
-    }
-
-    if (torrent.link) {
-      torrent.link = this.fixLink(torrent.link, { baseURL: parsedDetailsPage.URL }); // 如果 link 存在，则进行修正
-    }
-
-    return torrent as ITorrent;
   }
 
   /**

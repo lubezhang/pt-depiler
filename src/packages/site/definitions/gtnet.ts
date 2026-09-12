@@ -70,20 +70,7 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/torrentslist\\.php", "/search\\.php"],
-      selectors: {
-        rows: {
-          selector: "div#display ul.TorrentList",
-        },
-        keywords: { selector: "input[name='query']", attr: "value" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrentdetails\\.php\\?torrentid=[a-f0-9]+"],
     selectors: {
       link: { selector: "a[href*='download.php']", attr: "href" },
     },

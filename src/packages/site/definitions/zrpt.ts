@@ -1,4 +1,4 @@
-import type { ISiteMetadata, ITorrentTag } from "../types";
+import type { ISiteMetadata } from "../types";
 import { CategoryInclbookmarked, CategoryIncldead, CategorySpstate, SchemaMetadata } from "../schemas/NexusPHP";
 
 export const siteMetadata: ISiteMetadata = {
@@ -188,12 +188,6 @@ export const siteMetadata: ISiteMetadata = {
       ],
     },
   },
-
-  list: [
-    {
-      urlPattern: ["/torrents.php"],
-    },
-  ],
 
   userInfo: {
     ...SchemaMetadata.userInfo!,

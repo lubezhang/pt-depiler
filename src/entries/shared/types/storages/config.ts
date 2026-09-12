@@ -16,7 +16,7 @@ interface UiTableBehaviorItem<T = string> {
 }
 
 export interface IConfigPiniaStorageSchema {
-  version: string; // 插件版本，格式为 v0.0.5.1147+23f758f7 ，如果为空则表示第一次安装
+  version: string; // 应用版本，格式为 v0.0.5.1147+23f758f7，如果为空则表示第一次安装
   lang: TLangCode;
   theme: supportThemeType;
   isNavBarOpen: boolean;
@@ -32,31 +32,6 @@ export interface IConfigPiniaStorageSchema {
 
   // 用 timeline 和 statistic 等展示的用户名，如果为 "" 则由使用最多的站点决定（使用 configStore.getUserNames.perfName 获取）
   userName: string;
-
-  contextMenus: {
-    enabled: boolean; // 是否启用右键菜单
-    allowSelectionTextSearch: boolean; // 是否启用选择内容时搜索
-    allowSocialLinkSearch: boolean; // 是否启用社交链接（ douban, imdb ）搜索
-    allowLinkDownloadPush: boolean; // 是否允许链接推送
-  };
-
-  contentScript: {
-    enabled: boolean; // 是否启用 contentScript
-    enabledAtSocialSite: boolean; // 是否允许在社交站点  contentScript 中使用
-    allowExceptionSites: boolean; // 是否允许在 contentScript 中排除站点（即站点不显示侧边栏）
-
-    position: { x: number; y: number }; // 图标位置（运行时配置，用户不可以直接编辑）
-
-    applyTheme: boolean; // 是否响应主题样式
-    defaultOpenSpeedDial: boolean; // 是否默认打开按钮
-    stackedButtons: boolean; // 是否使用堆叠按钮
-    fadeEnterStyle: boolean; // 是否启用淡入效果（即默认半透明，当鼠标移入时不透明）
-
-    doubleConfirmAction: boolean; // 进行批量操作时，是否需要二步确认（避免误操作）
-    dragLinkOnSpeedDial: boolean; // 是否允许拖拽链接到 SpeedDial 上
-
-    socialSiteSearchBy: "id" | "title" | "imdb" | "chosen"; // 社交站点搜索方式，id: 使用 id 进行搜索，title: 使用主标题进行搜索，IMDb: 使用 IMDb 编号进行搜索，chosen: 使用用户选择的方式进行搜索
-  };
 
   // 对 MyData 页面 v-data-table 展示的额外控制项
   myDataTableControl: {

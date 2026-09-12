@@ -1,3 +1,5 @@
+import type { ICookie, ICookieInput, TCookieSameSite } from "@/shared/types.ts";
+
 export interface CookieInfo {
   name: string;
   value: string;
@@ -9,8 +11,6 @@ export interface CookieInfo {
   expirationDate?: number;
   sameSite?: string;
 }
-
-type CookieSetInput = Partial<chrome.cookies.SetDetails> & Partial<Pick<chrome.cookies.Cookie, "hostOnly">>;
 
 export function buildCookieUrl(secure: boolean, domain: string, path: string): string {
   return `http${secure ? "s" : ""}://${domain.replace(/^\./, "")}${path}`;
@@ -24,11 +24,11 @@ export function redactCookieUrl(value: string): string {
   }
 }
 
-function mapSameSiteToChrome(s?: string): chrome.cookies.SameSiteStatus {
-  if (s === "strict") return "strict" as chrome.cookies.SameSiteStatus;
-  if (s === "lax") return "lax" as chrome.cookies.SameSiteStatus;
-  if (s === "none") return "no_restriction" as chrome.cookies.SameSiteStatus;
-  return "unspecified" as chrome.cookies.SameSiteStatus;
+function mapSameSiteToApp(s?: string): TCookieSameSite {
+  if (s === "strict") return "strict";
+  if (s === "lax") return "lax";
+  if (s === "none") return "no_restriction";
+  return "unspecified";
 }
 
 function mapSameSiteToRust(s?: string): string | undefined {
@@ -38,7 +38,7 @@ function mapSameSiteToRust(s?: string): string | undefined {
   return undefined;
 }
 
-export function toChromeCookie(cookie: CookieInfo): chrome.cookies.Cookie {
+export function toAppCookie(cookie: CookieInfo): ICookie {
   return {
     name: cookie.name ?? "",
     value: cookie.value ?? "",
@@ -49,12 +49,12 @@ export function toChromeCookie(cookie: CookieInfo): chrome.cookies.Cookie {
     httpOnly: cookie.httpOnly,
     session: cookie.expirationDate == null,
     expirationDate: cookie.expirationDate,
-    sameSite: mapSameSiteToChrome(cookie.sameSite),
+    sameSite: mapSameSiteToApp(cookie.sameSite),
     storeId: "0",
   };
 }
 
-export function toCookieInfo(cookie: CookieSetInput): CookieInfo {
+export function toCookieInfo(cookie: ICookieInput): CookieInfo {
   let urlDomain: string | undefined;
   if (cookie.url) {
     try {

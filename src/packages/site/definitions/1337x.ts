@@ -233,31 +233,9 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [
-        "/trending",
-        "/trending-week",
-        "/search/",
-        "/category-search/",
-        "/sort-search/",
-        "/category-sort-search/",
-        "/top-100",
-        "/cat/",
-      ],
-      mergeSearchSelectors: true,
-      selectors: {
-        keywords: { selector: 'input[name="search"]', attr: "value" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrent/\\d+/.*"],
     selectors: {
-      title: { selector: "div.box-info-heading h1" },
       link: { selector: ["a[href^='magnet:?xt=']", "a[href^='http://itorrents.org/']"], attr: "href" },
-      size: { selector: "li:contains('Total size') > span", filters: [{ name: "parseSize" }] },
     },
   },
 };

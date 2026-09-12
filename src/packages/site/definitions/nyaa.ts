@@ -150,24 +150,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["si/?(\\?.*)?$"],
-    },
-  ],
-
   detail: {
-    urlPattern: ["si/view/\\d+"],
     selectors: {
-      title: { selector: ["div.container div.panel-heading > h3.panel-title"] },
-      id: {
-        selector: ":self",
-        elementProcess: (element: Document) => {
-          const url = element.URL;
-          const match = url.match(/\/view\/(\d+)/);
-          return match ? match[1] : url;
-        },
-      },
       link: { selector: ["a[href*='/download/']"], attr: "href" },
     },
   },

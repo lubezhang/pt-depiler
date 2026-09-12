@@ -155,27 +155,6 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/browse\\.php"],
-      mergeSearchSelectors: true,
-      selectors: {},
-    },
-  ],
-
-  detail: {
-    urlPattern: ["/details.php\\?id=\\d+"],
-    selectors: {
-      id: {
-        selector: ["input[name='tId']", "input[name='id']"],
-        attr: "value",
-      },
-      title: {
-        selector: [".details-title-eng", ".details-title-chs", "h1"],
-      },
-    },
-  },
-
   userInfo: {
     process: [
       {
@@ -286,26 +265,6 @@ export default class HDRoute extends PrivateSite {
 
     parsedTorrent.site = this.metadata.id;
     return parsedTorrent.title && parsedTorrent.id ? parsedTorrent : ({} as Partial<ITorrent>);
-  }
-
-  public override async transformDetailPage(doc: Document): Promise<ITorrent> {
-    const torrent = await super.transformDetailPage(doc);
-
-    const downloadLinkContainer = doc.querySelector<HTMLTextAreaElement | HTMLInputElement>("#details-download-link");
-    const button = doc.querySelector<HTMLElement>("button.buttonDownload");
-    const fullLink =
-      [
-        downloadLinkContainer?.value,
-        downloadLinkContainer?.textContent,
-        button?.getAttribute("data-clipboard-text"),
-        button?.getAttribute("data-link"),
-        button?.getAttribute("data-download-link"),
-      ]
-        .map((v) => v?.trim())
-        .find((v) => v && v.length > 0) || "";
-
-    torrent.link = fullLink || (torrent.id ? `/download.php?id=${torrent.id}` : torrent.link);
-    return torrent;
   }
 
   public override async getTorrentDownloadLink(torrent: ITorrent): Promise<string> {

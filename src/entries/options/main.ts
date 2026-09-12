@@ -6,7 +6,7 @@ import App from "./App.vue";
 import { tauriAdapter } from "~/extends/axios/tauriAdapter.ts";
 axios.defaults.adapter = tauriAdapter;
 
-// 注册原 offscreen/background 的业务 handler（单进程本地消息路由）
+// 注册业务 handler（单进程本地消息路由）
 import "./service/index.ts";
 
 // Vue Plugins

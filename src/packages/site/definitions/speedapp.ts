@@ -354,28 +354,8 @@ export const siteMetadata: ISiteMetadata = {
     area_adult: { name: "成人", enabled: false, requestConfig: { url: "/adult" } },
   },
 
-  list: [
-    {
-      urlPattern: [/\/(browse|internal|adult)(\?.*)?$/],
-      mergeSearchSelectors: true,
-      selectors: {
-        time: {
-          selector: "> div:nth-child(2)",
-          data: "originalTitle",
-          filters: [
-            { name: "replace", args: [/日/g, " "] },
-            { name: "replace", args: [/[年月]/g, "-"] },
-            { name: "parseTime" },
-          ],
-        },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: [/\/browse\/\d+\/t\//],
     selectors: {
-      title: { selector: "h5.text-emphasis" },
       link: { selector: "a[href^='/torrents/']:first", attr: "href" },
     },
   },

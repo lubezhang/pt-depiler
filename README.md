@@ -64,6 +64,11 @@ pnpm tauri build
 pnpm verify:desktop
 ```
 
+## 设计文档
+
+- [桌面端架构优化设计](docs/2026-09-12-桌面端架构优化设计.md)
+- [Tauri 网络与认证层执行计划](docs/2026-09-11-Tauri网络与认证层执行计划.md)
+
 ## 贡献
 
 提交问题或改进建议前，请先确认没有重复 Issue。涉及站点适配时，请不要在 Issue、日志或截图中泄露 Cookie、密钥、Passkey 或其他账号凭据。

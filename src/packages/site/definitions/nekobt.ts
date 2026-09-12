@@ -126,66 +126,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [
-        /\/$/,
-        "/search",
-        "/users/\\d+/peers",
-        "/users/\\d+/torrents",
-        "/users/\\d+\$",
-        "/groups/\\d+\$",
-        "/media/",
-      ],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "table.table tr:has(a[href^='/torrents/'])" },
-        id: { selector: "a[href^='/torrents/']", attr: "href", filters: [{ name: "parseNumber" }] },
-        time: { selector: "> td:nth-child(6)" },
-        title: { selector: "span.wrap-anywhere" },
-        size: { selector: "> td:nth-child(5)" },
-        category: { text: "Anime" },
-        url: { selector: "a[href^='/torrents/']", attr: "href" },
-        link: { selector: "a[title~='Public'][href^='magnet:?xt=']", attr: "href" },
-        author: { selector: "a[href^='/users/']" },
-        seeders: { selector: "> td:nth-child(7)" },
-        leechers: { selector: "> td:nth-child(8)" },
-        completed: { selector: "> td:nth-child(9)" },
-        comments: { selector: "span.wrap-anywhere ~ span.tag:has(svg) > span" },
-        tags: [
-          ...Object.values(subLevelTags).map((tag) => ({
-            ...tag,
-            selector: `span.tag:contains('${tag.name}')`,
-          })),
-          {
-            name: "OTL",
-            selector: "span.tag:contains('OTL')",
-            color: "green",
-          },
-          {
-            name: "MTL",
-            selector: "span.tag:contains('MTL')",
-            color: "red",
-          },
-          {
-            name: "Hardsub",
-            selector: "span.tag:contains('Hardsub')",
-            color: "red",
-          },
-          {
-            name: "Imported",
-            selector: "span.tag:contains('Imported')",
-            color: "#0c4a6e",
-          },
-        ],
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrents/\\d+"],
     selectors: {
-      title: { selector: "h2.card-title span:not([class])" },
       link: { selector: "a[href^='magnet:?xt=']:last", attr: "href" },
     },
   },

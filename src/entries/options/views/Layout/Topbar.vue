@@ -82,7 +82,7 @@ watch(
 
     <v-app-bar-title v-show="display.smAndUp.value" ref="titleTarget" style="min-width: 120px; max-width: 160px">
       <v-img inline src="/icons/logo/64.png" width="24"></v-img>
-      {{ t("manifest.extName") }}
+      {{ t("common.appName") }}
     </v-app-bar-title>
 
     <!-- 搜索输入框 -->

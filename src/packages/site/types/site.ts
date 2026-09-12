@@ -1,8 +1,7 @@
 // noinspection ES6PreferShortImport
 
 import type { AxiosRequestConfig } from "axios";
-import { TSiteID, TSiteHost, TSiteUrl, TSiteFullUrl, TPatterns } from "./base";
-import type { ITorrent } from "./torrent";
+import { TSiteID, TSiteUrl, TSiteFullUrl, TPatterns } from "./base";
 import type { ILevelRequirement, IUserInfo } from "./userinfo";
 import type { IElementQuery, ISearchCategories, ISearchConfig, ISearchEntryRequestConfig } from "./search";
 import type { timezoneOffset } from "../utils";
@@ -31,7 +30,7 @@ export interface ISiteUserInputMeta {
 }
 
 /**
- * 站点配置，这部分配置由系统提供，并随着每次插件更新而更新
+ * 站点配置，这部分配置由系统提供，并随着每次应用更新而更新
  */
 export interface ISiteMetadata {
   /**
@@ -81,7 +80,7 @@ export interface ISiteMetadata {
    * 1. 列表中第一个网址会作为默认的使用地址
    * 2. 如果网站支持 `https` ，请优先考虑填写 `https` 的地址
    * 3. 部分站点可能对于站点链接存在更为隐秘的要求，则请对链接进行 rot13 ，以防止在配置时泄露
-   *    （但这并不能阻止用户通过安装插件后在使用过程中知道对应网址
+   *    （但这并不能阻止用户安装应用后在使用过程中知道对应网址
    */
   urls: TSiteUrl[];
 
@@ -108,7 +107,7 @@ export interface ISiteMetadata {
   /**
    * 该站点已经！完全！死亡！没有任何恢复的可能性
    * - 对临时性的站点关闭，更建议用户使用 userConfig.isOffline 属性
-   * - 对于已经死亡的站点，插件：①不会在添加时显示该站点；②已添加的获取搜索结果、个人信息功能全部停止
+   * - 对于已经死亡的站点，应用：①不会在添加时显示该站点；②已添加的获取搜索结果、个人信息功能全部停止
    *
    * 对已经标记死亡的站点，建议注释或删除之后的所有配置项
    */
@@ -130,7 +129,7 @@ export interface ISiteMetadata {
   officialGroupPattern?: TPatterns;
 
   /**
-   * 站点搜索方法配置（主要用于插件 options 的适配）
+   * 站点搜索方法配置
    *
    * 由 AbstractBittorrentSite.transformSearchPage 方法进行转换，如果子类有覆写请按子类覆写逻辑理解
    */
@@ -144,101 +143,22 @@ export interface ISiteMetadata {
   searchEntry?: Record<string, ISearchEntryRequestConfig>;
 
   /**
-   * 种子列表页配置（主要用于插件 content-script 的适配）
-   *
-   * 由 AbstractBittorrentSite.transformListPage 方法进行转换，如果子类有覆写请按子类覆写逻辑理解
-   *
-   * 注：只有极其特殊的情况下才需要定义此处的 selectors ，未定义时，会使用Search中定义的信息
-   * 一般如下：
-   *  - 使用 AJAX 方法异步加载页面种子
-   */
-  list?: Array<{
-    /**
-     * 在 web 访问时，哪些些页面会被认为是种子列表页，被认为是种子列表页的页面会被插件自动添加种子列表批量下载、链接复制、远程推送的功能
-     *
-     * 如果定义了 urlPattern 插件会严格按照 urlPattern 进行匹配，
-     * 不然，插件会自动根据 search.requestConfig.url 以及 searchEntry[*].requestConfig.url 中的 url 自动生成，
-     * 字段为 uniq([search.requestConfig.url, ...searchEntry[*].requestConfig.url])
-     *
-     * 如果 pattern 为 string，会使用 new RegExp(pattern, 'i') 生成 RegExp 对象，
-     *
-     * 如果 pattern 为 RegExp 对象，则直接使用该对象
-     *
-     * 匹配对象为 location.href ，依次匹配，任一匹配成功，则会被认为是种子列表页，
-     */
-    urlPattern?: TPatterns;
-
-    /**
-     * 由于侧边栏组件先判断是否是 list ，导致某些应该是详情页的页面被误认为是列表页，
-     * 该配置用于排除一些不应该被认为是种子列表页的页面
-     *
-     * 匹配方式和 urlPattern 相同
-     */
-    excludeUrlPattern?: TPatterns;
-
-    /**
-     * 是否合并 search.selectors 中的配置到此处的 selectors 中，默认为 true
-     * 对使用 API 请求的站点，此处要显式声明为 false
-     */
-    mergeSearchSelectors?: boolean;
-
-    /**
-     * 对于种子列表页的解析配置，默认会使用 search.requestConfig.selectors 中的配置作为垫片
-     * 需要至少解析出 id, title, url, link
-     * 如果 link 不能解析出来，会调用 AbstractBittorrentSite.getTorrentDownloadLink 方法来获取下载链接
-     * 如果解析出 subTitle, seeders, leechers, completed, time, size ，会在高级列表中显示
-     *
-     * 额外增加字段说明：
-     * keywords: 用于获取种子列表页中正在使用的搜索关键词，如果获取到非空字符串，则在点击 "在插件中搜索的标识" 时自动填充该关键词
-     *   如果未设置，AbstractBittorrentSite.transformListPage 会自动根据 search.keywordPath 或 searchEntry[*].keywordPath 来推断，
-     *   比如：
-     *     - search.keywordPath 为 params.xxxx 时，keywords 会被自动推断为 { selector: 'input[name="xxxx"]' }
-     *     - search.keywordPath 为 data.xxxx 时，keywords 会被自动推断为 { selector: 'form[method="post" i] input[name="xxxx"]' }
-     *     - 如果仍未找到，则会尝试从url中解析 &xxxx= 以及 &search= , &keywords= , &keyword=, $q= 字段内容
-     */
-    selectors?: ISearchConfig["selectors"] & { keywords?: IElementQuery };
-  }>;
-
-  /**
-   * 种子详情页配置（主要用于插件 content-script 、 部分无法在搜索中构造种子 link 站点的适配）
-   *
-   * 由 AbstractBittorrentSite.{transformDetailPage, getTorrentDownloadLink} 方法进行转换，如果子类有覆写请按子类覆写逻辑理解
+   * 种子详情页请求配置，用于无法直接从搜索结果构造下载链接的站点。
+   * 由 AbstractBittorrentSite.getTorrentDownloadLink 方法使用。
    */
   detail?: {
     /**
-     * 在 web 访问时，哪些些页面会被认为是种子详情页，被认为是种子列表页的页面会被插件自动添加种子下载、链接复制、远程推送的功能
-     *
-     * urlPattern 无法进行自动生成，需要显式声明（一般情况下 schema 中已有相关声明）
-     * 其他表现和 list.urlPattern 相同。
-     */
-    urlPattern?: TPatterns;
-
-    /**
-     * 插件获取种子详情页时的配置，默认是在种子搜索时无法获取 link 的特殊站点使用，在使用时有垫片如下：
+     * 获取种子详情页时的请求配置，默认用于搜索结果中无法获取 link 的特殊站点：
      *   { responseType: "document", url: torrent.url }
      */
     requestConfig?: AxiosRequestConfig;
 
     /**
-     * 对于种子详情页的解析配置
-     *
-     * 对页面解析需要至少解析出 id, title, url, link
-     * 注意 我们使用 typeof link != 'undefined' 来确定是否获取到正确的信息
-     *
-     * 注意：
-     * 1. 为了尽可能减少配置，AbstractBittorrentSite.transformDetailPage 中预设了以下规则
-     *      - 如果未定义 url 的 selector，则 url 会被自动设置为 doc.URL || location.href
-     *      - 如果未定义 id 的 selector，且 url 中有 `&id=` 或者 `&tid=` 字段，则会被自动解析为 id
-     *                                 如果 url 中没有 `&id=` 或者 `&tid=` 字段，则 id 会被自动设置为 url
-     *      - 如果未定义 title 的 selector，则 html > body > title 会被自动设置为 title
-     *    其他模板的详见 metadata 或 override function 情况
-     *
-     * 2. AbstractBittorrentSite.getTorrentDownloadLink 中会使用 link 的 selector 来获取下载链接
+     * 下载链接选择器。AbstractBittorrentSite.getTorrentDownloadLink 会在详情页响应中使用 link 字段。
      */
     selectors?: {
-      link?: IElementQuery; // 用于获取下载链接不在搜索页，而在详情页的情况
-      [key: string]: IElementQuery | undefined;
-    } & Omit<ISearchConfig["selectors"], "rows">; // 种子相关选择器
+      link?: IElementQuery; // 下载链接不在搜索页时，从详情页响应中获取
+    };
   };
 
   download?: {
@@ -303,7 +223,7 @@ export interface ISiteMetadata {
    */
   userInfo?: {
     /**
-     * 如果可以，则从插件历史缓存的数据中获取那些数据（一般是比较恒定的数据，如 id, name, joinTime ）
+     * 如果可以，则从应用历史缓存的数据中获取那些数据（一般是比较恒定的数据，如 id, name, joinTime ）
      * 并可以帮助我们减少网络请求的字段
      */
     pickLast?: TUserInfoParseKey[];
@@ -426,9 +346,6 @@ export interface ISiteUserConfig {
   // 上传速度限制，单位为 MiB/s，0 或不填时不限速，用于推送种子文件到下载器的时候，传递上传速度限制
   uploadSpeedLimit?: number;
 
-  // 是否允许 content-script 访问该站点，默认为 true
-  allowContentScript?: boolean;
-
   // 种子下载链接后缀，默认为空字符串，如果站点需要在下载链接后添加一些参数，可以在此处设置
   downloadLinkAppendix?: string;
 
@@ -452,10 +369,3 @@ export interface ISiteUserConfig {
 
   [key: string]: any;
 }
-
-export interface IParsedTorrentListPage {
-  keywords: string;
-  torrents: ITorrent[];
-}
-
-export type TSchemaMetadataListSelectors = Required<Required<Required<ISiteMetadata>["list"]>[number]>["selectors"];

@@ -1,5 +1,4 @@
 import axios, { type AxiosRequestConfig } from "axios";
-import { stringify } from "urlencode";
 import { toMerged } from "es-toolkit";
 import { isEmpty } from "es-toolkit/compat";
 
@@ -22,6 +21,7 @@ import type {
   TTorrentDownloadStatus,
   IDownloadTorrentOption,
   IDownloadTorrentResult,
+  IDownloadFileOptions,
   AugmentedRequired,
 } from "@/shared/types.ts";
 
@@ -63,20 +63,6 @@ export async function getDownloaderInstance(downloaderId: string): Promise<Downl
   downloaderInstanceCache.set(downloaderId, { configKey, instance });
   return instance;
 }
-
-onMessage("getDownloaderConfig", async ({ data: downloaderId }) => await getDownloaderConfig(downloaderId));
-
-onMessage("getDownloaderList", async () => {
-  const metadata = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
-  const downloaders = metadata?.downloaders ?? {};
-  return Object.entries(downloaders).map(([id, config]) => ({
-    id,
-    name: config.name ?? "",
-    type: config.type ?? "",
-    enabled: config.enabled ?? false,
-    address: config.address ?? "",
-  }));
-});
 
 onMessage("getDownloaderVersion", async ({ data: downloaderId }) => {
   let downloaderVersion = "unknown";
@@ -288,11 +274,8 @@ async function downloadTorrentToLocalFile(
   let downloadStatus: TTorrentDownloadStatus = "downloading";
 
   const downloadUri = axios.getUri(downloadRequestConfig); // 组装 baseURL, url, params
-  const {
-    method: downloadMethod = "GET",
-    data: downloadData = {},
-    headers: downloadHeaders = {} as Record<string, string>,
-  } = downloadRequestConfig;
+  const { method: downloadMethod = "GET", headers: downloadHeaders = {} as Record<string, string> } =
+    downloadRequestConfig;
 
   // 如果设置为 web 方法，且没有 headers 的情况，直接使用 window.open 方法
   if (localDownloadMethod === "web") {
@@ -305,22 +288,17 @@ async function downloadTorrentToLocalFile(
     }
   }
 
-  // 如果设置为 extension，直接使用 chrome.downloads 方法
-  if (localDownloadMethod === "browser" && ["GET", "POST"].includes(downloadMethod.toUpperCase())) {
+  // 兼容旧配置名 browser：GET 请求直接交给 Tauri 原生下载命令。
+  if (localDownloadMethod === "browser" && downloadMethod.toUpperCase() === "GET") {
     try {
-      // 将 AxiosRequestConfig 转换为 chrome.downloads.DownloadOptions， 我们在这里只考虑 method, body, headers
-      const downloadOptions: chrome.downloads.DownloadOptions = {
+      const downloadOptions: IDownloadFileOptions = {
         url: downloadUri,
-        conflictAction: "uniquify",
-        method: downloadMethod.toUpperCase() as "GET" | "POST",
       };
 
-      if (downloadMethod.toUpperCase() === "POST" && !isEmpty(downloadData ?? {})) {
-        downloadOptions.body = stringify(downloadData);
-      }
-
       if (!isEmpty(downloadHeaders)) {
-        downloadOptions.headers = Object.entries(downloadHeaders).map(([name, value]) => ({ name, value }));
+        downloadOptions.headers = Object.fromEntries(
+          Object.entries(downloadHeaders).map(([name, value]) => [name, String(value)]),
+        );
       }
 
       logger({ msg: `Download torrent file with browser method: ${downloadUri}`, data: downloadOptions });
@@ -333,7 +311,7 @@ async function downloadTorrentToLocalFile(
     localDownloadMethod = "extension"; // 如果还是不能使用的情况（怎么可能？），则直接使用 extension 方法
   }
 
-  // 如果设置为 extension，其次考虑使用 getRemoteTorrentFile 转为 Blob 再调用 chrome.downloads
+  // 兼容旧配置名 extension：由应用获取种子内容，再保存为 Blob。
   if (localDownloadMethod === "extension") {
     try {
       logger({ msg: `Download torrent file with extension method: ${downloadUri}`, data: downloadRequestConfig });
@@ -346,7 +324,7 @@ async function downloadTorrentToLocalFile(
         filename = `[${torrent.site}] ${torrent.title}.torrent`;
       }
 
-      await sendMessage("downloadFile", { url: torrentUrl, filename, conflictAction: "uniquify" });
+      await sendMessage("downloadFile", { url: torrentUrl, filename });
       downloadStatus = await setDownloadStatus(downloadId, "completed");
       URL.revokeObjectURL(torrentUrl);
     } catch (e) {

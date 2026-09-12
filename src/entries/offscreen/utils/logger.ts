@@ -1,7 +1,6 @@
 /**
  * 关于 logger 方法记录
- * 在 background 等其他页面中， 请使用 sendMessage("logger", {}).catch();
- * 在 offscreen 中， 请使用 logger({}) 直接调用
+ * 跨模块调用使用 sendMessage("logger", {}).catch()，当前模块内可直接调用 logger({})。
  */
 import { nanoid } from "nanoid";
 import { useSessionStorage } from "@vueuse/core";
@@ -24,7 +23,3 @@ export function logger(data: ILoggerItem) {
 }
 
 onMessage("logger", ({ data }) => logger(data));
-onMessage("getLogger", async () => loggerStorage.value);
-onMessage("clearLogger", async () => {
-  loggerStorage.value = [];
-});

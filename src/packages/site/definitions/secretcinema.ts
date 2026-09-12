@@ -1,11 +1,5 @@
 import type { ISiteMetadata, ITorrent, IUserInfo, ISearchInput } from "../types";
-import {
-  parseTimeWithZone,
-  parseSizeString,
-  definedFilters,
-  extractContent,
-  buildCategoryOptionsFromList,
-} from "../utils";
+import { parseTimeWithZone, definedFilters, extractContent, buildCategoryOptionsFromList } from "../utils";
 import Sizzle from "sizzle";
 import GazelleJSONAPI, {
   SchemaMetadata,
@@ -73,49 +67,6 @@ export const siteMetadata: ISiteMetadata = {
       },
     },
   },
-
-  list: [
-    {
-      urlPattern: ["/torrents.php"],
-      excludeUrlPattern: [/\/torrents\.php\?(?:.*&)?(id|torrentid)=\d+/],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "div.torrent_card > div.torrent_info" },
-        title: {
-          selector: "a[href*='torrents.php?id=']:first > b",
-        },
-        url: { selector: "a[href*='torrents.php?id=']:first", attr: "href" },
-        link: { selector: "a[href^='torrents.php?action=download']", attr: "href" },
-        size: {
-          selector: "div.activity_info > div:nth-child(2)",
-          filters: [{ name: "parseSize" }],
-        },
-        seeders: {
-          selector: "div.torrent_seed",
-          filters: [{ name: "parseNumber" }],
-        },
-        leechers: {
-          selector: "div.torrent_peers",
-          filters: [{ name: "parseNumber" }],
-        },
-        completed: {
-          selector: "div.torrent_snatched",
-          filters: [{ name: "parseNumber" }],
-        },
-        time: {
-          selector: "span.time",
-          filters: [
-            { name: "parseTTL" },
-            (ts: number) => {
-              const offsetMinutes = new Date().getTimezoneOffset();
-              const offsetMs = offsetMinutes * 60 * 1000;
-              return ts + 1 * 3600000 + offsetMs; // UTC+1
-            },
-          ],
-        },
-      },
-    },
-  ],
 
   userInfo: {
     ...SchemaMetadata.userInfo!,

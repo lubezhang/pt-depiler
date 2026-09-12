@@ -148,8 +148,6 @@ export const siteMetadata: ISiteMetadata = {
     ...SchemaMetadata.detail!,
     selectors: {
       ...SchemaMetadata.detail!.selectors,
-      title: { selector: "div.page-header h2" },
-      id: idSelector,
       link: linkSelector,
     },
   },

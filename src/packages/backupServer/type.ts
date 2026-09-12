@@ -1,3 +1,5 @@
+import type { ICookie } from "@/shared/types.ts";
+
 export interface IBackupConfig {
   id?: string;
   type: string;
@@ -51,7 +53,7 @@ export interface IBackupFileManifest {
 export interface IBackupData {
   manifest?: Partial<IBackupFileManifest>;
 
-  cookies?: Record<string, chrome.cookies.Cookie[]>;
+  cookies?: Record<string, ICookie[]>;
 
   [key: string]: any;
 }

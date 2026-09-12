@@ -7,7 +7,6 @@ output/
 dist
 dist-*
 *.local
-public/_locales
 
 # Tauri build artifacts
 src-tauri/target
@@ -39,11 +38,6 @@ lerna-debug.log*
 # local env files
 .env.local
 .env.*.local
-
-# Vue Browser Extension Output
-*.pem
-*.pub
-*.zip
 
 ### Windows template
 # Windows thumbnail cache files

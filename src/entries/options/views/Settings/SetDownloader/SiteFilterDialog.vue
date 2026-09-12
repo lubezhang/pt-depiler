@@ -7,7 +7,6 @@ import type { IDownloaderMetadata, TDownloaderKey } from "@/shared/types.ts";
 
 import SiteFavicon from "@/options/components/SiteFavicon/Index.vue";
 import CheckSwitchButton from "@/options/components/CheckSwitchButton.vue";
-import { useConfigStore } from "@/options/stores/config.ts";
 
 const showDialog = defineModel<boolean>();
 const { clientId } = defineProps<{
@@ -16,14 +15,12 @@ const { clientId } = defineProps<{
 
 const { t } = useI18n();
 const metadataStore = useMetadataStore();
-const configStore = useConfigStore();
 
 const clientConfig = ref<IDownloaderMetadata>();
 const excludedSites = ref<string[]>([]);
 
 const addedSites = computed(() =>
   Object.entries(metadataStore.sites)
-    .filter(([id, site]) => (configStore.contentScript.allowExceptionSites ? (site.allowContentScript ?? true) : true))
     .map(([id]) => ({ id, name: metadataStore.siteNameMap[id] ?? id }))
     .sort((a, b) => a.name.localeCompare(b.name)),
 );

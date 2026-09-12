@@ -172,37 +172,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/torrents/browse"],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "table.torrents tr.torrent" },
-        id: { selector: ":self", data: "tid" },
-        category: { selector: "a.category[data-ccid]", data: "ccid" },
-        title: {
-          selector: "div.name",
-          elementProcess: (el) => {
-            el?.querySelectorAll("span")?.forEach((span: HTMLSpanElement) => span?.remove()); // 移除 span 标签
-            return el?.textContent?.trim() ?? "";
-          },
-        },
-        url: { selector: "div.name a", attr: "href" },
-        link: { selector: "a.download", attr: "href" },
-        seeders: { selector: "td.td-seeders" },
-        leechers: { selector: "td.td-leechers" },
-        completed: { selector: "td.td-snatched" },
-        size: { selector: "td.td-size", filters: [{ name: "parseSize" }] },
-        time: { selector: "td.td-uploaded-time", filters: [{ name: "parseTime", args: ["yyyy-MM-ddHH:mm:ss"] }] },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrent/\\d+"],
     selectors: {
-      id: { selector: 'input[name="torrentID"]', attr: "value" },
-      title: { selector: ["#torrentnameid", "#torrentName"] },
       link: { selector: "#detailsDownloadButton", attr: "href" },
     },
   },

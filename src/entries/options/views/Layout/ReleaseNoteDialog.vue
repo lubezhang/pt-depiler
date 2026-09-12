@@ -32,14 +32,14 @@ function parseVersion(versionString: string): ParsedVersion {
 }
 
 const storeVersion = parseVersion(configStore.version);
-const currentVersion = parseVersion(__EXT_VERSION__);
+const currentVersion = parseVersion(__APP_VERSION__);
 const failbackVersion = parseVersion("v0.0.5.1147+23f758f7"); // 这个版本号为引入更新窗口时间点前的发布送审版本号
 const storeBuildHash = computed<string>(() => storeVersion.buildHash || failbackVersion.buildHash);
 
 // const isFirstInstall = computed<boolean>(() => configStore.version === "");
 
 function dialogLeave() {
-  configStore.version = __EXT_VERSION__;
+  configStore.version = __APP_VERSION__;
   configStore.$save();
 }
 </script>
@@ -49,7 +49,7 @@ function dialogLeave() {
     <v-card>
       <v-card-title class="pa-0">
         <v-toolbar color="blue-grey-darken-2">
-          <v-toolbar-title>{{ t("layout.releaseNote.title", { extName: t("manifest.extName") }) }}</v-toolbar-title>
+          <v-toolbar-title>{{ t("layout.releaseNote.title", { appName: t("common.appName") }) }}</v-toolbar-title>
         </v-toolbar>
       </v-card-title>
 

@@ -132,17 +132,7 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/search\\.php", "/browse\\.php"],
-      selectors: {
-        keywords: { selector: "input[name='search']", attr: "value" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/details\\.php\\?id=[\\w-]+"],
     selectors: {
       link: { selector: "a[href^='download.php/']", attr: "href" },
     },

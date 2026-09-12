@@ -243,40 +243,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/#/openTorrent/list"],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "tr[data-row-key]" },
-        id: { selector: ":self", attr: "data-row-key" },
-        title: { selector: [".torrent-title", "a[href*='#/torrent/detail/']", "a[href*='/#/torrent/detail/']"] },
-        subTitle: { selector: ".short-desc" },
-        url: {
-          selector: ":self",
-          attr: "data-row-key",
-          filters: [{ name: "prepend", args: ["/#/torrent/detail/"] }],
-        },
-        link: {
-          selector: ":self",
-          attr: "data-row-key",
-          filters: [{ name: "prepend", args: ["/api/torrent/download?id="] }],
-        },
-        size: { selector: ".file-size", filters: [{ name: "parseSize" }] },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/#/torrent/detail/\\d+/?"],
     selectors: {
-      id: {
-        selector: ":self",
-        elementProcess: (element: Document) => {
-          return element.URL.match(/\/#\/torrent\/detail\/(\d+)\/?/)?.[1] ?? element.URL;
-        },
-      },
-      title: { selector: ".torrent-title" },
       link: { text: "" },
     },
   },

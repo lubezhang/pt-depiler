@@ -221,69 +221,6 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/torrents.php", "/music.php", "/officialgroup.php", "/reseed.php"],
-    },
-    {
-      urlPattern: ["/detailsgame.php"],
-      mergeSearchSelectors: false,
-      selectors: {
-        // TODO,
-        rows: {
-          selector: ".rowfollow",
-          filter: (rows: HTMLElement[] | null): HTMLElement[] | null => {
-            // 只保留游戏种子
-            if (Array.isArray(rows)) {
-              return Array.from(rows).filter((row) => !!row.querySelector("a[title='点击查看此种子详细资料']"));
-            }
-            return rows;
-          },
-        },
-        url: {
-          selector: "a[href*='download.php?id=']",
-          elementProcess: (element: HTMLAnchorElement) => {
-            // 处理游戏种子下载链接
-            const url = URL.parse(element.href);
-            if (!url) {
-              return "";
-            }
-            url.pathname = "detailsgame.php";
-            return url.toString();
-          },
-        },
-        link: {
-          selector: "a[href*='download.php?id=']",
-          attr: "href",
-        },
-        title: {
-          selector: "a[title=点击查看此种子详细资料]",
-        },
-        size: {
-          selector: "div > span",
-        },
-        author: {
-          text: "匿名",
-          selector: "div[id^='ktorrent'] > span > a[href^='userdetails.php'] > b",
-        },
-        seeders: {
-          selector: "div > span + span",
-        },
-        leechers: {
-          selector: "div > span + span + span",
-        },
-        completed: {
-          selector: "div > span + span + span + span",
-        },
-        time: {
-          text: 0,
-          selector: ["div[id^='ktorrent'] > #hidefl ~ span[title]", "div[id^='ktorrent'] > span > span[title]"],
-          attr: "title",
-        },
-      },
-    },
-  ],
-
   userInfo: {
     ...SchemaMetadata.userInfo!,
     selectors: {

@@ -94,12 +94,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [{ urlPattern: ["/index.php", /\/(\?.+)?$/, "/search.php"] }],
-
   detail: {
-    urlPattern: ["/details.php"],
     selectors: {
-      title: { selector: 'a[type="application/x-bittorrent"]' },
       link: { selector: 'a[type="application/x-bittorrent"]', attr: "href" },
     },
   },

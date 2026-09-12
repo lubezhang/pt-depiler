@@ -7,10 +7,16 @@ import type { TDownloaderKey } from "@/shared/types/storages/metadata.ts";
 export type TTorrentDownloadKey = number;
 export type TTorrentDownloadStatus = "pending" | "downloading" | "completed" | "failed";
 
+export interface IDownloadFileOptions {
+  url: string;
+  filename?: string;
+  headers?: Record<string, string>;
+}
+
 export const LocalDownloadMethod = [
-  "web", // 和PTPP一样打开对应种子下载的链接页面，然后由浏览器自动拉起下载过程，只有 method='get' 的种子才能支持，其他情况会回落到 extension
-  "browser", // （默认）由插件直接调用 chrome.downloads.download() 方法，支持 post, data, headers 参数（够用了），此时 filename 由浏览器自动猜测
-  "extension", // （回落）插件调用 axios.requests() 方法，获取并解析种子，生成 Blob 后交由 chrome.downloads.download ，此时 filename 由插件直接控制，可能会出现错误，同时支持 axios 的高级参数
+  "web", // 打开种子下载链接，仅支持无自定义请求头的 GET 请求，其他情况回落到应用中转
+  "browser", // 兼容旧配置名：由 Tauri 原生下载命令保存远程文件
+  "extension", // 兼容旧配置名：应用获取并解析种子后保存 Blob
 ] as const;
 
 export type TLocalDownloadMethod = (typeof LocalDownloadMethod)[number];

@@ -195,10 +195,7 @@ export const siteMetadata: ISiteMetadata = {
   },
 
   detail: {
-    urlPattern: ["/details.php", /\/t\/(\d+)/],
     selectors: {
-      id: { selector: "a[tid]", attr: "tid" },
-      title: { selector: "h1" },
       link: { selector: 'td > a[href*="/dl/"][onclick*="copyToClip"]', attr: "href" },
     },
   },

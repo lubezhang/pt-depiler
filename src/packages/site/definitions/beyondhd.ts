@@ -201,40 +201,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  // 该站种子列表页并不提供种子下载直链，且无法拼接获得
-  list: [],
-
   detail: {
-    urlPattern: ["/torrents/(.+)\\.(\\d+)"],
     selectors: {
-      id: {
-        selector: ":self",
-        elementProcess: (element: Document) => {
-          // 尝试从页面 URL 中获取 ID，例如 /torrent/158672
-          const url = element.URL;
-          const urlIdMatch = url.match(/\/torrents\/(.+)\.(\d+)/);
-          if (urlIdMatch && urlIdMatch[2]) {
-            return urlIdMatch[2];
-          }
-
-          // 如果两种方式都找不到 ID，则返回 undefined
-          return undefined;
-        },
-      },
-      title: {
-        selector: ["tr:has(td:first-child:contains('Name')) > td:last-child"],
-        switchFilters: {
-          "tr:has(td:first-child:contains('Name')) > td:last-child": [
-            (element: string) => {
-              if (!element) {
-                return undefined;
-              }
-
-              return element;
-            },
-          ],
-        },
-      },
       link: {
         selector: ["a[href*='/download/']"],
         attr: "href",

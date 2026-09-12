@@ -11,10 +11,7 @@ import {
 } from "../types";
 
 import { REPO_URL } from "~/helper.ts";
-import { setupReplaceUnsafeHeader } from "~/extends/axios/replaceUnsafeHeader.ts";
-import { name as EXT_NAME, version as EXT_VERSION } from "~/../package.json";
-
-setupReplaceUnsafeHeader(axios);
+import { name as APP_NAME, version as APP_VERSION } from "~/../package.json";
 
 const bgmUrlPattern = /^(?:https?:\/\/)?(?:bgm\.tv|bangumi\.tv|chii\.in)\/subject\/(\d+)\/?/;
 
@@ -137,7 +134,7 @@ export async function fetchInformation(
 
   const bangumiApiReqHeader: Record<string, any> = {
     // refs: https://github.com/bangumi/api/blob/master/docs-raw/user%20agent.md
-    "user-agent": `${EXT_NAME}/${EXT_VERSION} (${REPO_URL})`,
+    "user-agent": `${APP_NAME}/${APP_VERSION} (${REPO_URL})`,
   };
 
   // Bangumi 默认不需要 apikey，但是如果设置了 apikey，则使用 apikey 进行请求

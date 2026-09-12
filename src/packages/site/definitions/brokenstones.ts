@@ -116,26 +116,6 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/torrents.php"],
-      excludeUrlPattern: [/\/torrents\.php\?(?:.*&)?(id|torrentid)=\d+/, /searchstr=(?:tt)?\d+/],
-      selectors: {
-        time: {
-          selector: "span.time",
-          filters: [
-            { name: "parseTTL" },
-            (ts: number) => {
-              const offsetMinutes = new Date().getTimezoneOffset();
-              const offsetMs = offsetMinutes * 60 * 1000;
-              return ts - 1 * 3600000 + offsetMs; // UTC-1
-            },
-          ],
-        },
-      },
-    },
-  ],
-
   levelRequirements: [
     {
       id: 1,

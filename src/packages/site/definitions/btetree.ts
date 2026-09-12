@@ -67,12 +67,8 @@ export const siteMetadata: ISiteMetadata = {
       category: { text: "Music" },
     },
   },
-
-  list: [{ urlPattern: [/\/$/, "/index.php"], mergeSearchSelectors: true }],
   detail: {
-    urlPattern: ["/details.php"],
     selectors: {
-      title: { selector: "td.heading:contains('Show') + td" },
       link: { selector: "a.index[href^='download.php/']", attr: "href" },
     },
   },

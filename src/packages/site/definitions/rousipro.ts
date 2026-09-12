@@ -59,44 +59,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/categories", "/search"],
-      mergeSearchSelectors: false,
-      selectors: {
-        keywords: { selector: "input[placeholder*='搜索种子']" },
-        rows: { selector: 'div.border > a[href^="/torrent/"]' },
-        id: { selector: ":self", attr: "href", filters: [{ name: "replace", args: ["/torrent/", ""] }] },
-        title: { selector: "span.truncate[title]", attr: "title" },
-        subTitle: { selector: "span.text-muted-foreground.truncate" },
-        url: { selector: ":self", attr: "href" },
-        // link 由 getTorrentDownloadLink 方法构造
-        time: {
-          selector: "div:nth-child(6)[title]",
-          attr: "title",
-          filters: [{ name: "parseTime", args: ["yyyy/MM/dd HH:mm:ss"] }],
-        },
-        size: { selector: "div:nth-child(4)", filters: [{ name: "parseSize" }] },
-        seeders: { selector: "div:nth-child(5)", filters: [{ name: "split", args: ["/", 0] }] },
-        leechers: { selector: "div:nth-child(5)", filters: [{ name: "split", args: ["/", 1] }] },
-        completed: { selector: "div:nth-child(5)", filters: [{ name: "split", args: ["/", 2] }] },
-        category: { selector: "div:nth-child(3)" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrent/"],
     selectors: {
-      id: {
-        selector: ":self",
-        elementProcess: (element: Document) => {
-          const url = element.URL;
-          const match = url.match(torrentIdRegex);
-          return match ? match[1] : url;
-        },
-      },
-      title: { selector: "h1" },
       link: { text: "" },
     },
   },

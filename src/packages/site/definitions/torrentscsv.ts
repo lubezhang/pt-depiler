@@ -35,27 +35,4 @@ export const siteMetadata: ISiteMetadata = {
       completed: { selector: "completed" },
     },
   },
-
-  list: [
-    {
-      urlPattern: ["/search"],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "main.container div.card" },
-        id: { selector: "a[href^='magnet']", attr: "href" },
-        title: { selector: "a[href^='magnet']" },
-        url: { text: "https://torrents-csv.com/" }, // 该站种子不存在独立介绍页
-        link: { selector: "a[href^='magnet']", attr: "href" },
-        leechers: { selector: "div.card-body > div.flex > div:nth-child(1) > span:nth-child(2)" },
-        size: {
-          selector: "div.card-body > div.flex > div:nth-child(2) > span:nth-child(2)",
-          filters: [{ name: "parseSize" }],
-        },
-        time: {
-          selector: "div.card-body > div.flex > div:nth-child(3) > span:nth-child(2)",
-          filters: [{ name: "parseTime", args: ["yyyy-MM-dd"] }],
-        },
-      },
-    },
-  ],
 };

@@ -39,21 +39,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: ["/team/", "/user/", "/series/", "/page/", "rip/\\d+$", "/\?term="],
-      excludeUrlPattern: ["/t/"],
-      mergeSearchSelectors: true,
-      selectors: {
-        keywords: { selector: 'input[name="term"]', attr: "value" },
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/t/"],
     selectors: {
-      title: { selector: "ol.breadcrumb a[href]" },
       link: { selector: "a[href]:contains('下载种子')", attr: "href" },
     },
   },

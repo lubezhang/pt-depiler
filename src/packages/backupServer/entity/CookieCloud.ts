@@ -5,13 +5,13 @@
  * 我们可以利用它的API来作为一个简单的备份服务器。
  * 需要配置：
  *   - url: CookieCloud 服务器地址
- *   - uuid: 你在该 CookieCloud 的身份识别信息，注意，插件仅同步已添加站点的cookies，所以尽量和该 CookieCloud 上使用的其他 uuid 不同
+ *   - uuid: 你在该 CookieCloud 的身份识别信息；应用仅同步已添加站点的 cookies，所以尽量和其他客户端使用不同的 uuid
  *   - password: CookieCloud 下用于加解密的密码，
  * 注意：
  *  1. CookieCloud 不支持历史记录，所以 list 方法只返回当前的情况
  *  2. CookieCloud 不支持删除记录，当调用 delete 时，我们会更新服务器数据为 { cookie_data: {} }
  *  3. 我们不向 CookieCloud 提供 local_storage_data，实际上 我们提交的数据格式为 { cookie_data, ptd_data, metadata }
- *     这样可以 在为其他需要 CookieCloud 支持的环境提供直接支持的同时，存储插件独有的数据
+ *     这样可以在为其他需要 CookieCloud 支持的环境提供直接支持的同时，存储应用独有的数据
  *  4. 使用公用 CookieCloud 可能存在数据丢失、泄露的风险，同时 CookieCloud Server 也有备份文件大小的限制
  */
 
@@ -26,6 +26,7 @@ import type {
   IBackupFileManifest,
   IBackupMetadata,
 } from "../type.ts";
+import type { ICookie } from "@/shared/types.ts";
 
 interface CookieCloudConfig extends IBackupConfig {
   config: {
@@ -72,7 +73,7 @@ interface ICookieCloudManifest extends IBackupFileManifest {
 }
 
 interface ICookieCloudFile {
-  cookie_data: Record<string, chrome.cookies.Cookie[]>;
+  cookie_data: Record<string, ICookie[]>;
   local_storage_data: {};
   ptd_data: Omit<IBackupData, "manifest" | "cookies">;
   manifest: ICookieCloudManifest;

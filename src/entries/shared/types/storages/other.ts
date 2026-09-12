@@ -1,5 +1,5 @@
 /**
- * 本处存放未使用 pinia 管理的其他 chrome.storage.local 使用到的存储结构类型
+ * 本处存放未使用 Pinia 管理的其他持久化存储结构类型。
  */
 import type { TSiteID } from "@ptd/site";
 import type { IStoredUserInfo, TSearchSnapshotKey } from "./metadata.ts";

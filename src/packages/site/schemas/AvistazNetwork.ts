@@ -8,7 +8,6 @@ import PrivateSite from "./AbstractPrivateSite";
 import {
   EResultParseStatus,
   ETorrentStatus,
-  TSchemaMetadataListSelectors,
   type ISiteMetadata,
   type IUserInfo,
   type ITorrent,
@@ -49,12 +48,6 @@ function isAuthSuccessResp(data: unknown): data is AuthSuccessResp {
 function isAuthFailResp(data: unknown): data is AuthFailResp {
   return !!data && typeof data === "object" && "message" in data && typeof data.message === "string";
 }
-
-const commonListSelectors: TSchemaMetadataListSelectors = {
-  subTitle: { text: "" },
-  comments: { text: "N/A" },
-  category: { selector: "i[data-original-title]", attr: "data-original-title" },
-};
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -237,73 +230,9 @@ export interface IAvzNetRawTorrent {
   [key: string]: any;
 }
 
-// 种子列表页
-export const listTorrentPageMetadata = {
-  urlPattern: ["/torrents"],
-  mergeSearchSelectors: false,
-  selectors: {
-    ...commonListSelectors,
-    rows: { selector: "#content-area > div.block > div > table:nth-child(3) > tbody > tr" },
-
-    id: {
-      selector: "div.torrent-file a[href*='/torrent/']",
-      attr: "href",
-      filters: [
-        (href: string) => {
-          const torrentIdMatch = href.match(/\/torrent\/(\d)/);
-          if (torrentIdMatch && torrentIdMatch[1]) {
-            return torrentIdMatch[1];
-          }
-          return undefined;
-        },
-      ],
-    },
-    title: { selector: "div.torrent-file a[href*='/torrent/']" },
-    url: { selector: "div.torrent-file a[href*='/torrent/']", attr: "href" },
-    link: { selector: "td:nth-child(3) a[href*='/download/torrent/']", attr: "href" },
-    // time显示为1 minute/1 hour，放弃获取
-    size: { selector: "td:nth-child(6)", filters: [{ name: "parseSize" }] },
-
-    seeders: { selector: "td:nth-child(7)" },
-    leechers: { selector: "td:nth-child(8)" },
-    completed: { selector: "td:nth-child(9)" },
-  },
-};
-
-// 下载历史页和HR页
-export const listHistoryPageMetadata = {
-  urlPattern: ["/profile/(.+)/history"],
-  mergeSearchSelectors: false,
-  selectors: {
-    ...commonListSelectors,
-    rows: { selector: "div.block > div.table-responsive > table > tbody > tr" },
-
-    id: {
-      selector: "a.torrent-filename",
-      attr: "href",
-      filters: [
-        (href: string) => {
-          const match = href.match(/\/torrent\/(\d+)/);
-          return match ? match[1] : undefined;
-        },
-      ],
-    },
-    // Bootstrap tooltip 初始化后将 title 移至 data-original-title
-    title: { selector: "a.torrent-filename", attr: "data-original-title" },
-    category: { selector: "td:first-child i", attr: "data-original-title" },
-    url: { selector: "a.torrent-filename", attr: "href" },
-    link: { selector: "a.torrent-download-icon", attr: "href" },
-    // 行内存在同色的 span.badge-extra（上传量/下载量/Credited Download），用 FA 图标类唯一区分
-    size: { selector: "span.badge-extra.fa-database", filters: [{ name: "parseSize" }] },
-    seeders: { selector: "span.badge-extra.fa-arrow-up" },
-    leechers: { selector: "span.badge-extra.fa-arrow-down" },
-    completed: { selector: "span.badge-extra.fa-check" },
-  },
-};
-
 export const SchemaMetadata: Pick<
   ISiteMetadata,
-  "version" | "schema" | "type" | "timezoneOffset" | "search" | "userInfo" | "userInputSettingMeta" | "list" | "detail"
+  "version" | "schema" | "type" | "timezoneOffset" | "search" | "userInfo" | "userInputSettingMeta" | "detail"
 > = {
   version: 0,
   schema: "AvistazNetwork",
@@ -380,20 +309,8 @@ export const SchemaMetadata: Pick<
     },
   },
 
-  list: [listTorrentPageMetadata, listHistoryPageMetadata],
-
   detail: {
-    urlPattern: ["/torrent/"],
     selectors: {
-      id: {
-        selector: ":self",
-        elementProcess: (t) => {
-          const e = t.URL,
-            r = e.match(/\/detail\/(\d+)/);
-          return r ? r[1] : e;
-        },
-      },
-      title: { selector: "table.table tr:contains('Title') td:nth-child(2)" },
       link: { selector: "a.btn-primary[href$='.torrent']", attr: "href" },
     },
   },

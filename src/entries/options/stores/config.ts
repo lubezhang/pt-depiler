@@ -12,6 +12,8 @@ import { useMetadataStore } from "./metadata.ts";
 const deprecatedConfigKeys = [
   "myDataTableControl.tableFontSize", // v0.0.4.961 废弃
   "myDataTableControl.joinTimeWeekOnly", // 已废弃，使用 joinTimeFormat 替代
+  "contextMenus", // 浏览器扩展右键菜单，桌面端不支持
+  "contentScript", // 浏览器扩展页面注入，桌面端不支持
 ];
 
 export const defaultTimelineBackgroundColor = "#455A64";
@@ -66,31 +68,6 @@ export const useConfigStore = defineStore("config", {
 
     saveTableBehavior: true,
     enableTableMultiSort: false,
-
-    contextMenus: {
-      enabled: true,
-      allowSelectionTextSearch: true,
-      allowSocialLinkSearch: true,
-      allowLinkDownloadPush: true,
-    },
-
-    contentScript: {
-      enabled: true,
-      enabledAtSocialSite: true,
-      allowExceptionSites: false,
-
-      position: { x: 0, y: 0 },
-
-      applyTheme: false,
-      defaultOpenSpeedDial: false,
-      stackedButtons: false,
-      fadeEnterStyle: false,
-
-      doubleConfirmAction: true,
-      dragLinkOnSpeedDial: true,
-
-      socialSiteSearchBy: "chosen",
-    },
 
     tableBehavior: {
       MyData: {
@@ -372,12 +349,6 @@ export const useConfigStore = defineStore("config", {
       if (this.saveTableBehavior) {
         this.$save();
       }
-    },
-
-    updateContentScriptPosition(x: number, y: number) {
-      this.contentScript.position.x = x;
-      this.contentScript.position.y = y;
-      this.$save();
     },
   },
 });

@@ -73,12 +73,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [{ urlPattern: [/pw\/(\?(tpage=\d+|search=.+|mode=\d+))?$/] }],
-
   detail: {
-    urlPattern: ["/showprofile/"],
     selectors: {
-      title: { selector: 'font[color="DarkRed"]' },
       link: { selector: 'td:contains("Hash") + td', filters: [{ name: "prepend", args: ["magnet:?xt=urn:btih:"] }] },
     },
   },

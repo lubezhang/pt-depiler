@@ -104,46 +104,6 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [/show\/\d+/],
-      mergeSearchSelectors: false,
-      selectors: {
-        rows: { selector: "div#torrents tbody > tr.group" },
-        id: {
-          selector: "a[href^='/torrents.php'][href*='torrentid=']",
-          attr: "href",
-          filters: [{ name: "querystring", args: ["torrentid"] }],
-        },
-        title: { selector: "a[href^='/torrents.php'][href*='torrentid='][title]", attr: "title" },
-        url: { selector: "a[href^='/torrents.php'][href*='torrentid=']", attr: "href" },
-        link: { selector: "a[href^='/torrents.php'][href*='action=download']", attr: "href" },
-        seeders: { selector: "td:nth-child(5)" },
-        leechers: { selector: "td:nth-child(6)" },
-        completed: { selector: "td:nth-child(4)" },
-        size: { selector: "td:nth-child(3)", filters: [{ name: "parseSize" }] },
-        keywords: { selector: "input#searchbox_torrents", elementProcess: (el) => el?.value ?? "" },
-      },
-    },
-    {
-      urlPattern: ["/torrents/browse"],
-      mergeSearchSelectors: false,
-      selectors: {
-        ...SchemaMetadata.search!.selectors!,
-        id: {
-          selector: "a.overlay_torrent[href]",
-          attr: "href",
-          filters: [{ name: "querystring", args: ["torrentid"] }],
-        },
-        seeders: { selector: "td:nth-child(7)" },
-        leechers: { selector: "td:nth-child(8)" },
-        completed: { selector: "td:nth-child(6)" },
-        size: { selector: "td:nth-child(5)", filters: [{ name: "parseSize" }] },
-        keywords: { selector: "input#searchtext", elementProcess: (el) => el?.value ?? "" },
-      },
-    },
-  ],
-
   levelRequirements: [
     {
       id: 1,

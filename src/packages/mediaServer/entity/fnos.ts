@@ -186,7 +186,7 @@ export default class FnOS extends AbstractMediaServer<IFnOSConfig> {
 
   private getAuthorizationHeader(userId?: string) {
     const userIdPart = userId ? `UserId="${userId}", ` : "";
-    return `Emby ${userIdPart}Client="PT-depiler", Device="Chrome", DeviceId="${this.deviceId}", Version="${__EXT_VERSION__}"`;
+    return `Emby ${userIdPart}Client="PT-depiler", Device="Desktop", DeviceId="${this.deviceId}", Version="${__APP_VERSION__}"`;
   }
 
   private get session(): IFnOSSession | undefined {

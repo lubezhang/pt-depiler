@@ -1,6 +1,6 @@
 import { ISiteMetadata, ITorrent, ISearchInput, ETorrentStatus } from "../types";
 import Sizzle from "sizzle";
-import Gazelle, { SchemaMetadata, top10PageList } from "../schemas/Gazelle.ts";
+import Gazelle, { SchemaMetadata } from "../schemas/Gazelle.ts";
 import { createDocument, parseValidTimeString, buildCategoryOptionsFromList } from "../utils.ts";
 
 const nblTimezoneOffset = -11;
@@ -129,51 +129,8 @@ export const siteMetadata: ISiteMetadata = {
     },
   },
 
-  list: [
-    {
-      urlPattern: [/\/torrents\.php(?!.*(?:\bid=|torrentid=|showid=))/],
-      selectors: {
-        time: {
-          text: 0,
-          selector: "span.time",
-          filters: [
-            { name: "parseTTL" },
-            (ts: number) => {
-              const offsetMinutes = new Date().getTimezoneOffset();
-              const offsetMs = offsetMinutes * 60 * 1000;
-              return ts + offsetMs + nblTimezoneOffset * 3600000;
-            },
-          ],
-        },
-      },
-    },
-    {
-      urlPattern: [showPageRegex],
-      selectors: {
-        keywords: { selector: "div#showinfobox span.size4" },
-      },
-    },
-    {
-      ...top10PageList,
-      selectors: {
-        ...top10PageList.selectors!,
-        title: {
-          selector: "> td > script",
-          elementProcess: (el: HTMLElement) => {
-            const overlayDoc = createOverlayDocument(el);
-            const lastTd = Sizzle("td:last", overlayDoc)[0];
-            return lastTd.textContent.trim();
-          },
-        },
-        size: {}, // from innerText
-      },
-    },
-  ],
-
   detail: {
-    urlPattern: ["/torrents\\.php\\?id=\\d+"],
     selectors: {
-      title: { selector: ["div:has(.mediainfo) > a:first"], filters: [{ name: "split", args: [" ", 0] }] },
       link: { selector: ["a:contains('Download')"], attr: "href" },
     },
   },

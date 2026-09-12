@@ -37,7 +37,7 @@ const showReleaseNoteDialog = ref<boolean>(false);
 
 // 由于App.vue是整个应用的根组件，此时 configStore 等 pinia store 可能还未初始化完成，所以需要监听 $onReady
 configStore.$onReady(() => {
-  if (configStore.showReleaseNoteOnVersionChange && configStore.version !== __EXT_VERSION__) {
+  if (configStore.showReleaseNoteOnVersionChange && configStore.version !== __APP_VERSION__) {
     showReleaseNoteDialog.value = true;
   }
 });

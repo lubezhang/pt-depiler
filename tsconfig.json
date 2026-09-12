@@ -22,7 +22,7 @@
     "forceConsistentCasingInFileNames": true,
     "experimentalDecorators": true,
     "resolveJsonModule": true,
-    "types": ["node", "chrome"],
+    "types": ["node"],
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
       "~/*": ["./src/*"],
