@@ -1,0 +1,49 @@
+[package]
+name = "pt-depiler"
+version = "0.0.6"
+description = "PT-depiler desktop app (Tauri)"
+authors = ["Pt-Plugins"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "pt_depiler_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["cookies", "json", "native-tls", "gzip", "system-proxy"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "io-util"] }
+url = "2"
+base64 = "0.22"
+cookie = "0.18"
+cookie_store = "0.22"
+reqwest_cookie_store = "0.9"
+tempfile = "3"
+libc = "0.2"
+aes-gcm = "0.10"
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["linux-native-sync-persistent", "crypto-rust", "vendored"] }
+
+[features]
+# this feature is used for production builds where `devUrl` is not used
+custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+sha2 = "0.10"

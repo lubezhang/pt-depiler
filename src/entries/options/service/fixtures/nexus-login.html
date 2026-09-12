@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+  <body>
+    <form action="../takelogin.php?returnto=%2Ftorrents.php" method="post">
+      <input type="hidden" name="csrf_token" value="nexus-token" />
+      <input type="hidden" name="returnto" value="/torrents.php" />
+      <input type="text" name="username" />
+      <input type="password" name="password" />
+      <input type="checkbox" name="keep_login" value="yes" />
+      <input type="text" name="imagestring" />
+      <img src="../image.php?id=123" alt="Captcha" />
+    </form>
+  </body>
+</html>
