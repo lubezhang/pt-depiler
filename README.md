@@ -1,81 +1,73 @@
-<p align="center">
-  <img alt="Logo" width="100" src="./public/icons/logo/128.png?raw=true">
-</p>
+# PT-depiler
 
-<p align="center">
-    <a href="../../releases?include_prereleases/latest" title="GitHub Releases"><img src="https://img.shields.io/github/v/release/pt-plugins/PT-depiler.svg?include_prereleases"></a>
-    <a href="../../releases" title="GitHub Download"><img src="https://img.shields.io/github/downloads/pt-plugins/PT-depiler/total.svg?label=Downloads"></a>
-    <img src="https://img.shields.io/badge/Used-TypeScript%20Vue-blue.svg">
-    <a href="./LICENSE" title="GitHub license"><img src="https://img.shields.io/github/license/pt-plugins/PT-depiler.svg?label=License" alt="GitHub license"/></a>
-    <a href="https://t.me/joinchat/NZ9NCxPKXyby8f35rn_QTw"><img src="https://img.shields.io/badge/Telegram-Chat-blue.svg?logo=telegram" alt="Telegram"/></a>
-    <a href="https://deepwiki.com/pt-plugins/PT-depiler"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"/></a>
-</p>
+PT-depiler 是一个基于 Tauri 2、Vue 3 和 TypeScript 构建的 PT 站点桌面管理工具。它聚合多个 PT 站点的搜索与账号数据，并可将种子发送至已配置的下载器。
 
-### 🚀 关于 Introduction
+## 功能
 
-PT-depiler 是在原 [PT-Plugin-Plus](https://github.com/pt-plugins/PT-Plugin-Plus) 基础上，
-迁移为基于 [Tauri](https://tauri.app/) 的 macOS 桌面应用，
-一个可以提升 PT 站点使用效率的工具。
+- 支持 NexusPHP、Unit3D、Gazelle 等多种 PT 站点类型
+- 跨站点聚合搜索、筛选种子并批量发送下载任务
+- 集成 qBittorrent、Transmission、Deluge、ruTorrent、Aria2 和 Synology Download Station 等下载器
+- 展示站点用户信息、数据统计和历史记录
+- 支持站点登录与 Cookie 同步；敏感数据加密保存，密钥交由操作系统安全存储管理
+- 支持 WebDAV、Gist、CookieCloud、Google Drive、Dropbox、S3 等备份与同步服务
 
-适用于各 PT 站，可使下载种子等各项操作变化更简单、快捷。配合下载服务器（如 Transmission、qBittorrent 等），可一键下载指定的种子。
+## 技术栈
 
-### 🖥️ 功能 Features
+- 桌面端：Tauri 2 与 Rust
+- 前端：Vue 3、TypeScript、Vite、Vuetify 与 Pinia
+- 包管理器：pnpm
 
-- **多站点支持**：兼容 NexusPHP、Unit3D、Gazelle 等多种类型的 PT 站点，提供聚合搜索相同关键字的种子、批量下载等功能 （ 支持站点列表见： [PT Site Status](https://pt-plugins.github.io/monitor/) ）
-- **下载器集成**：支持 qBittorrent、Transmission、Deluge、ruTorrent、Synology Download Station、Aria2 等多种下载器，并保存下载历史记录
-- **备份服务器管理**：集成 WebDav、Gist、CookieCloud、Google Drive、DropBox、OWSS 等备份服务，方便数据同步
-- **智能搜索**：增强搜索功能，支持多站点同时搜索并合并结果
-- **用户信息管理**：集中显示和管理各站点的用户信息和统计数据
-- **站点登录与 Cookie 同步**：可直接打开站点登录窗口，完成登录后同步 Cookie；Cookie 加密保存，密钥存储在 macOS 系统安全存储中
-- 更多功能请参考 [Wiki](../../wiki)
+## 开发环境
 
-### 🔧 运行与构建
+请先安装以下工具：
 
-当前桌面版面向 macOS。请预先准备好 [Git](https://git-scm.com/)、[Node.js](https://nodejs.org/en)、[pnpm](https://pnpm.io/) 和 [Rust](https://www.rust-lang.org/tools/install)。
+- Git
+- Node.js 23.7 或更高版本
+- pnpm 10.14 或更高版本
+- Rust 工具链，以及 Tauri 在对应操作系统上的构建依赖
 
-建议使用 [VSCode](https://code.visualstudio.com/) 或 [WebStorm](https://www.jetbrains.com/webstorm/) 作为开发工具。安装依赖后可直接启动开发版或打包应用：
+macOS 下还需要可用的 Xcode Command Line Tools。其他系统的 Tauri 前置依赖请参阅 [Tauri 官方文档](https://v2.tauri.app/start/prerequisites/)。
+
+## 本地开发
 
 ```bash
-git clone https://github.com/pt-plugins/PT-depiler
-cd PT-depiler
+git clone https://github.com/lubezhang/pt-depiler.git
+cd pt-depiler
 pnpm install
 pnpm tauri dev
+```
 
-# 生成 macOS 应用包
+`pnpm tauri dev` 会启动 Vite 开发服务器并打开桌面应用。
+
+## 常用命令
+
+```bash
+# 启动前端开发服务器
+pnpm dev
+
+# 运行桌面应用开发模式
+pnpm tauri dev
+
+# 类型检查
+pnpm check
+
+# 运行单元测试
+pnpm test
+
+# 构建前端资源
+pnpm build:dist
+
+# 构建桌面应用安装包
 pnpm tauri build
 
-# 运行前端、Rust 与桌面构建验证
+# 执行格式、类型、测试及 Rust 构建校验
 pnpm verify:desktop
 ```
 
-### 💁‍♂️ 贡献 Contributors
+## 贡献
 
-✨ 欢迎 Star & 提 Issue，共同完善 PT-Depiler！
+提交问题或改进建议前，请先确认没有重复 Issue。涉及站点适配时，请不要在 Issue、日志或截图中泄露 Cookie、密钥、Passkey 或其他账号凭据。
 
-> 请不要在 Issue 中提出一般性问题。Issue 仅用于报告错误、提出改进建议或请求新功能。
+## 许可证
 
-我们还有一个 [help wanted](../../labels/%22help%20wanted%22) 的问题列表，您可能会感兴趣。
-
-![Alt](https://repobeats.axiom.co/api/embed/9d98187b3a4c57e8c3a7087ff45d61bc03741af0.svg "Repobeats analytics image")
-
-### 📝 许可证 License
-
-PT-Depiler 是一个开源项目，遵循 [MIT 许可证](http://opensource.org/licenses/MIT)
-
-Copyright (c) 2020-present [pt-plugins](https://github.com/pt-plugins)
-
-## Star History
-
-<a href="https://www.star-history.com/?type=date&repos=pt-plugins%2FPT-depiler">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=pt-plugins/PT-depiler&type=date&theme=dark&legend=top-left&sealed_token=OpJ3esFdalMwUXwBy-fVSBoD13v91i_UOr42DGy3YnLp1vYTmzz-HlmjbwfzTMJK22WAF77Mxee0x-lJe92NjXvP49gWWVu7EhT84a48k1NhYwnbtC2LOXyqDKThfZBnFF8pXClgBHQlFQbuo9ECpgC4u4Srg412B8A4rCyBbHovALa7zXcHckFLy0CV" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=pt-plugins/PT-depiler&type=date&legend=top-left&sealed_token=OpJ3esFdalMwUXwBy-fVSBoD13v91i_UOr42DGy3YnLp1vYTmzz-HlmjbwfzTMJK22WAF77Mxee0x-lJe92NjXvP49gWWVu7EhT84a48k1NhYwnbtC2LOXyqDKThfZBnFF8pXClgBHQlFQbuo9ECpgC4u4Srg412B8A4rCyBbHovALa7zXcHckFLy0CV" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=pt-plugins/PT-depiler&type=date&legend=top-left&sealed_token=OpJ3esFdalMwUXwBy-fVSBoD13v91i_UOr42DGy3YnLp1vYTmzz-HlmjbwfzTMJK22WAF77Mxee0x-lJe92NjXvP49gWWVu7EhT84a48k1NhYwnbtC2LOXyqDKThfZBnFF8pXClgBHQlFQbuo9ECpgC4u4Srg412B8A4rCyBbHovALa7zXcHckFLy0CV" />
- </picture>
-</a>
-
----
-
-特别感谢以下所有为本项目做出贡献的人 😍！
-
-[![Contributors](https://contrib.rocks/image?repo=pt-plugins/PT-depiler)](../../graphs/contributors)
+本项目采用 [MIT License](LICENSE) 发布。
