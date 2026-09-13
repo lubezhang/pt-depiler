@@ -5,12 +5,11 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { isUndefined } from "es-toolkit/compat";
 import type { DataTableHeader } from "vuetify";
-import { EResultParseStatus, type ISiteUserConfig, type IUserInfo, type TSiteID } from "@ptd/site";
+import { EResultParseStatus, type TSiteID } from "@ptd/site";
 
 import { useConfigStore } from "@/options/stores/config.ts";
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
 import { useMetadataStore } from "@/options/stores/metadata.ts";
-import { useTableCustomFilter } from "@/options/directives/useAdvanceFilter.ts";
 import { formatDate, formatSize, formatTimeAgo } from "@/options/utils.ts";
 
 import SiteName from "@/options/components/SiteName.vue";
@@ -23,6 +22,7 @@ import BonusFormatSpan from "./BonusFormatSpan.vue";
 import ExportUserInfoDialog from "./ExportUserInfoDialog.vue";
 
 import { formatRatio } from "./utils/format.ts";
+import { tableCustomFilter } from "./utils/filter.ts";
 import { tableData, initTableData, cancelFlushSiteLastUserInfo, flushSiteLastUserInfo } from "./utils/lastUserData.ts";
 
 const { t } = useI18n();
@@ -87,11 +87,6 @@ const filteredTableBooleanControlKeys = computed(() => {
   ) as (keyof typeof configStore.myDataTableControl)[];
 });
 
-interface IUserInfoItem extends IUserInfo {
-  siteUserConfig: ISiteUserConfig;
-  siteName: string;
-}
-
 const {
   tableWaitFilterRef,
   tableFilterRef,
@@ -100,16 +95,7 @@ const {
   updateTableFilterValueFn,
   buildFilterDictFn,
   toggleKeywordStateFn,
-} = useTableCustomFilter<IUserInfoItem>({
-  parseOptions: {
-    keywords: ["site", "status", "siteUserConfig.groups"],
-    ranges: ["updateAt", "messageCount"],
-  },
-  titleFields: ["site", "siteName", "name"],
-  format: {
-    status: "number",
-  },
-});
+} = tableCustomFilter;
 
 const tableSelected = ref<TSiteID[]>([]); // 选中的站点行
 
