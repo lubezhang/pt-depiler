@@ -30,7 +30,9 @@ watch(
 const { pixelRatio } = useDevicePixelRatio();
 function setIgnoreWrongPixelRatio() {
   configStore.ignoreWrongPixelRatio = true;
-  configStore.$save();
+  void configStore.$save().catch((error) => {
+    console.error("[pinia] Failed to save the pixel ratio preference", error);
+  });
 }
 
 const showReleaseNoteDialog = ref<boolean>(false);

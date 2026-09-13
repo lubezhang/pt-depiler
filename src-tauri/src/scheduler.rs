@@ -10,7 +10,9 @@ pub fn start_scheduler(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(60)).await;
         loop {
-            let _ = app1.emit("scheduler://flush-user-info", ());
+            if let Err(error) = app1.emit("scheduler://flush-user-info", ()) {
+                eprintln!("[scheduler] failed to emit flush-user-info event: {error}");
+            }
             tokio::time::sleep(Duration::from_secs(600)).await;
         }
     });
@@ -20,7 +22,9 @@ pub fn start_scheduler(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(120)).await;
         loop {
-            let _ = app2.emit("scheduler://auto-backup", ());
+            if let Err(error) = app2.emit("scheduler://auto-backup", ()) {
+                eprintln!("[scheduler] failed to emit auto-backup event: {error}");
+            }
             tokio::time::sleep(Duration::from_secs(600)).await;
         }
     });
@@ -36,7 +40,9 @@ pub async fn schedule_redownload(
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(delay_secs)).await;
-        let _ = app.emit("scheduler://redownload", &download_id);
+        if let Err(error) = app.emit("scheduler://redownload", &download_id) {
+            eprintln!("[scheduler] failed to emit redownload event: {error}");
+        }
     });
     Ok(())
 }

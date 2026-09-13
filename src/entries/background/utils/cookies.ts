@@ -11,6 +11,13 @@ import { onMessage, sendMessage } from "@/messages.ts";
 import { extStorage } from "@/storage.ts";
 import { redactCookieUrl, toAppCookie, toCookieInfo, type CookieInfo } from "./cookieCore.ts";
 
+function reportCookieFailure(message: string, error: unknown) {
+  console.error(`[cookies] ${message}`, error);
+  void sendMessage("logger", { msg: message, level: "debug" }).catch((loggerError) => {
+    console.error(`[cookies] Failed to record cookie diagnostic: ${message}`, loggerError);
+  });
+}
+
 /** 计算cookie的剩余有效期（以天为单位） */
 export function calculateRemainingDays(expirationDate?: number): number {
   if (!expirationDate) {
@@ -28,7 +35,8 @@ onMessage("getAllCookies", async ({ data }) => {
   } else if (data?.url) {
     try {
       domain = new URL(data.url).hostname;
-    } catch {
+    } catch (_invalidUrl) {
+      console.debug("[cookies] Ignoring invalid cookie URL while resolving domain");
       domain = undefined;
     }
   }
@@ -54,7 +62,8 @@ export async function checkAndExtendCookies(url: string): Promise<void> {
     let host: string;
     try {
       host = new URL(url).hostname;
-    } catch {
+    } catch (_invalidUrl) {
+      console.debug("[cookies] Ignoring invalid cookie URL while checking extension");
       return;
     }
 
@@ -73,14 +82,11 @@ export async function checkAndExtendCookies(url: string): Promise<void> {
           await invoke("set_cookie", { cookie: { ...cookie, expirationDate: newExpirationDate } });
         }
       } catch (error) {
-        sendMessage("logger", {
-          msg: `Failed to extend cookie ${cookie.name} for url ${logUrl}`,
-          level: "debug",
-        }).catch();
+        reportCookieFailure(`Failed to extend cookie ${cookie.name} for url ${logUrl}`, error);
       }
     }
   } catch (error) {
-    sendMessage("logger", { msg: `Failed to check and extend cookies for url ${logUrl}`, level: "debug" }).catch();
+    reportCookieFailure(`Failed to check and extend cookies for url ${logUrl}`, error);
   }
 }
 

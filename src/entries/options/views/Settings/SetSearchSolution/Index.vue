@@ -110,7 +110,9 @@ async function confirmDeleteSearchSolution(solutionId: TSolutionKey) {
 
 function simplePatchSearchSolution(solutionId: TSolutionKey, value: boolean) {
   metadataStore.solutions[solutionId].enabled = value;
-  metadataStore.$save();
+  void metadataStore.$save().catch((error) => {
+    console.error("[pinia] Failed to save the search solution state", error);
+  });
 }
 
 function setDefaultSearchSolution(toDefault: boolean, solutionId: TSolutionKey) {
@@ -125,7 +127,9 @@ function setDefaultSearchSolution(toDefault: boolean, solutionId: TSolutionKey) 
     metadataStore.solutions[solutionId].isDefault = false;
   }
 
-  metadataStore.$save();
+  void metadataStore.$save().catch((error) => {
+    console.error("[pinia] Failed to save the default search solution", error);
+  });
 }
 
 const isAllSolutionDefault = computed(() => metadataStore.defaultSolutionId === "default");

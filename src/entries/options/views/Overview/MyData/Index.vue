@@ -33,6 +33,12 @@ const metadataStore = useMetadataStore();
 
 const currentDate = new Date();
 
+function saveMyDataPreferences() {
+  void configStore.$save().catch((error) => {
+    console.error("[pinia] Failed to save My Data preferences", error);
+  });
+}
+
 type TExtendDataTableHeader = DataTableHeader & { props?: any };
 
 const fullTableHeader = reactive([
@@ -245,7 +251,7 @@ const showExportDialog = ref(false);
                 hide-details
                 class="ml-2"
                 @click.stop
-                @update:model-value="() => configStore.$save()"
+                @update:model-value="saveMyDataPreferences"
               >
                 <v-btn
                   v-for="type in ['alive', 'aliveWeek', 'added']"
@@ -273,7 +279,7 @@ const showExportDialog = ref(false);
                     density="compact"
                     hide-details
                     @click.stop
-                    @update:model-value="() => configStore.$save()"
+                    @update:model-value="saveMyDataPreferences"
                   />
                 </v-list-item-action>
               </template>

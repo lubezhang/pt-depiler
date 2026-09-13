@@ -13,6 +13,7 @@ import {
 
 import type { IDownloaderMetadata } from "@/shared/types.ts";
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { useRuntimeStore } from "@/options/stores/runtime.ts";
 
 import Editor from "./Editor.vue";
 
@@ -22,11 +23,13 @@ const showDialog = defineModel<boolean>();
 
 const { t } = useI18n();
 const metadataStore = useMetadataStore();
+const runtimeStore = useRuntimeStore();
 
 const currentStep = ref<0 | 1>(0);
 const selectedClientType = ref<string | null>(null);
 const storedDownloaderConfig = ref<Partial<IDownloaderMetadata>>({});
 const isDownloaderConfigValid = ref<boolean>(false);
+const isSaving = ref(false);
 
 function resetDialog() {
   currentStep.value = 0;
@@ -56,15 +59,23 @@ async function updateStoredDownloaderConfigByDefault(type: string) {
 }
 
 async function saveStoredDownloaderConfig() {
-  await metadataStore.addDownloader(storedDownloaderConfig.value as IDownloaderMetadata);
+  isSaving.value = true;
+  try {
+    await metadataStore.addDownloader(storedDownloaderConfig.value as IDownloaderMetadata);
 
-  // 如果只有一个下载器，则将这个下载器设为默认下载器
-  if (metadataStore.getDownloaders.length === 1) {
-    metadataStore.defaultDownloader = { id: storedDownloaderConfig.value.id!, folder: "", tags: "" };
-    metadataStore.$save();
+    // 如果只有一个下载器，则将这个下载器设为默认下载器
+    if (metadataStore.getDownloaders.length === 1) {
+      metadataStore.defaultDownloader = { id: storedDownloaderConfig.value.id!, folder: "", tags: "" };
+      await metadataStore.$save();
+    }
+
+    showDialog.value = false;
+  } catch (error) {
+    console.error("[pinia] Failed to add downloader", error);
+    runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
+  } finally {
+    isSaving.value = false;
   }
-
-  showDialog.value = false;
 }
 </script>
 
@@ -164,7 +175,8 @@ async function saveStoredDownloaderConfig() {
         </v-btn>
         <v-btn
           v-if="currentStep === 1"
-          :disabled="!isDownloaderConfigValid"
+          :disabled="!isDownloaderConfigValid || isSaving"
+          :loading="isSaving"
           color="success"
           prepend-icon="mdi-check-circle-outline"
           variant="text"

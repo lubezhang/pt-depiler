@@ -9,177 +9,195 @@ import { IDownloadTorrentOption, IMetadataPiniaStorageSchema } from "@/shared/ty
 
 import { sleep } from "~/helper.ts";
 
-/**
- * Tauri 迁移：原 @webext-core/job-scheduler 的周期任务改由 Rust scheduler 通过 event 触发
- * （见 scheduler.rs：flush-user-info 10min、auto-backup 10min）。此处仅保留业务逻辑。
- */
-
 export enum EJobType {
   FlushUserInfo = "flushUserInfo",
   ReDownloadTorrent = "reDownloadTorrent",
   AutoBackup = "autoBackup",
 }
 
-function autoFlushUserInfo(retryIndex = 0) {
-  return async () => {
-    const configStore = (await extStorage.getItem("config"))!;
+function reportTaskFailure(operation: string, error: unknown, data?: Record<string, unknown>) {
+  console.error(`[background] ${operation}`, error);
+  void sendMessage("logger", { level: "error", module: "background", msg: operation, data }).catch((loggerError) => {
+    console.error(`[background] Failed to record task diagnostic: ${operation}`, loggerError);
+  });
+}
 
-    const {
-      enabled = false,
-      interval = 1,
-      afterTime = "00:00",
-      retry: { max: retryMax = 0, interval: retryInterval = 5 } = {},
-    } = configStore?.userInfo?.autoReflush ?? {};
+function recordTaskLog(message: string, data?: Record<string, unknown>) {
+  void sendMessage("logger", { level: "info", module: "background", msg: message, data }).catch((error) => {
+    console.error(`[background] Failed to record task log: ${message}`, error);
+  });
+}
 
-    if (!enabled) {
+function runBackgroundTask(operation: string, task: () => Promise<void>) {
+  void task().catch((error) => reportTaskFailure(operation, error));
+}
+
+export async function runAutoFlushUserInfo(retryIndex = 0): Promise<void> {
+  const configStore = await extStorage.getItem("config");
+  const {
+    enabled = false,
+    interval = 1,
+    afterTime = "00:00",
+    retry: { max: retryMax = 0, interval: retryInterval = 5 } = {},
+  } = configStore?.userInfo?.autoReflush ?? {};
+
+  if (!enabled) return;
+
+  const curDate = new Date();
+  const curDateFormat = format(curDate, "yyyy-MM-dd");
+  let metadataStore = await extStorage.getItem("metadata");
+  if (!metadataStore) throw new Error("Auto-refresh requires metadata storage");
+
+  if (retryIndex === 0) {
+    const [afterHour, afterMinute] = afterTime.split(":").map((v) => parseInt(v));
+    if (curDate.getHours() < afterHour || (curDate.getHours() === afterHour && curDate.getMinutes() < afterMinute)) {
+      recordTaskLog("Auto-refreshing user information paused before the allowed refresh time");
       return;
     }
 
-    const curDate = new Date();
-    const curDateFormat = format(curDate, "yyyy-MM-dd");
-    let metadataStore = (await extStorage.getItem("metadata"))!;
-
-    if (retryIndex === 0) {
-      const [afterHour, afterMinute] = afterTime.split(":").map((v) => parseInt(v));
-      if (curDate.getHours() < afterHour || (curDate.getHours() === afterHour && curDate.getMinutes() < afterMinute)) {
-        sendMessage("logger", {
-          msg: `Auto-refreshing user information paused since current time is before the allowed refresh time.`,
-        }).catch();
+    metadataStore = await extStorage.getItem("metadata");
+    if (!metadataStore) throw new Error("Auto-refresh requires metadata storage");
+    const lastFlushDateFormat = format(metadataStore.lastUserInfoAutoFlushAt, "yyyy-MM-dd");
+    if (curDateFormat === lastFlushDateFormat) {
+      const nextFlushTime = metadataStore.lastUserInfoAutoFlushAt + interval * 60 * 60 * 1000;
+      if (curDate.getTime() < nextFlushTime) {
+        recordTaskLog("Auto-refreshing user information paused until the configured interval elapses");
         return;
       }
+    }
+  }
 
-      metadataStore = (await extStorage.getItem("metadata"))!;
-      const lastFlushDateFormat = format(metadataStore.lastUserInfoAutoFlushAt, "yyyy-MM-dd");
+  recordTaskLog(`Auto-refreshing user information${retryIndex > 0 ? ` (retry ${retryIndex})` : ""}`);
+  let processedSiteCount = 0;
+  const failFlushSites: TSiteID[] = [];
 
-      if (curDateFormat === lastFlushDateFormat) {
-        const nextFlushTime = metadataStore.lastUserInfoAutoFlushAt + interval * 60 * 60 * 1000;
-        if (curDate.getTime() < nextFlushTime) {
-          sendMessage("logger", {
-            msg: `Auto-refreshing user information paused since refresh interval not reached.`,
-          }).catch();
-          return;
+  metadataStore = await extStorage.getItem("metadata");
+  if (!metadataStore) throw new Error("Auto-refresh requires metadata storage");
+  for (const [siteId, siteConfig] of Object.entries(metadataStore.sites)) {
+    if (!siteConfig.isOffline && siteConfig.allowQueryUserInfo) {
+      try {
+        const thisSiteUserInfo = (await sendMessage("getSiteUserInfo", siteId)) ?? {};
+        if (typeof thisSiteUserInfo[curDateFormat] === "undefined") {
+          const userInfoResult = await sendMessage("getSiteUserInfoResult", siteId);
+          if (userInfoResult.status !== EResultParseStatus.success) failFlushSites.push(siteId);
+          processedSiteCount += 1;
         }
+      } catch (error) {
+        failFlushSites.push(siteId);
+        reportTaskFailure(`Auto-refresh failed for site ${siteId}`, error);
       }
     }
+  }
 
-    sendMessage("logger", {
-      msg: `Auto-refreshing user information at ${curDateFormat}${retryIndex > 0 ? `(Retry #${retryIndex})` : ""}`,
-    }).catch();
+  recordTaskLog("Auto-refreshing user information finished", { processedSiteCount, failCount: failFlushSites.length });
+  metadataStore = await extStorage.getItem("metadata");
+  if (!metadataStore) throw new Error("Auto-refresh requires metadata storage");
+  metadataStore.lastUserInfoAutoFlushAt = new Date().getTime();
+  await extStorage.setItem("metadata", metadataStore);
 
-    let processedSiteCount = 0;
-    const failFlushSites: TSiteID[] = [];
-
-    metadataStore = (await extStorage.getItem("metadata"))!;
-    for (const [siteId, siteConfig] of Object.entries(metadataStore.sites)) {
-      if (!siteConfig.isOffline && siteConfig.allowQueryUserInfo) {
-        try {
-          const thisSiteUserInfo = (await sendMessage("getSiteUserInfo", siteId)) ?? {};
-          if (typeof thisSiteUserInfo[curDateFormat] === "undefined") {
-            const userInfoResult = await sendMessage("getSiteUserInfoResult", siteId);
-            if (userInfoResult.status !== EResultParseStatus.success) {
-              failFlushSites.push(siteId);
-            }
-            processedSiteCount += 1;
-          }
-        } catch (e) {
-          failFlushSites.push(siteId);
-        }
-      }
-    }
-
-    sendMessage("logger", {
-      msg: `Auto-refreshing user information finished, ${processedSiteCount} sites processed, ${failFlushSites.length} failed.`,
-      data: { failFlushSites },
-    }).catch();
-
-    metadataStore = (await extStorage.getItem("metadata"))!;
-    metadataStore.lastUserInfoAutoFlushAt = new Date().getTime();
-    await extStorage.setItem("metadata", metadataStore);
-
-    if (failFlushSites.length > 0 && retryIndex < retryMax) {
-      sendMessage("logger", {
-        msg: `Retrying auto-refresh for ${failFlushSites.length} failed sites in ${retryInterval} minutes (Retry #${retryIndex + 1})`,
-      }).catch();
-      setTimeout(() => autoFlushUserInfo(retryIndex + 1)().catch(() => {}), retryInterval * 60 * 1000);
-    }
-  };
+  if (failFlushSites.length > 0 && retryIndex < retryMax) {
+    recordTaskLog("Scheduling auto-refresh retry", { failCount: failFlushSites.length, retryIndex: retryIndex + 1 });
+    setTimeout(
+      () => {
+        runBackgroundTask("Scheduled auto-refresh retry failed", () => runAutoFlushUserInfo(retryIndex + 1));
+      },
+      retryInterval * 60 * 1000,
+    );
+  }
 }
 
-function autoBackup() {
-  return async () => {
-    const metadataStore = (await extStorage.getItem("metadata")) as IMetadataPiniaStorageSchema | undefined;
-    if (!metadataStore?.backupServers) {
-      return;
-    }
+export async function runAutoBackup(): Promise<void> {
+  const metadataStore = (await extStorage.getItem("metadata")) as IMetadataPiniaStorageSchema | null;
+  if (!metadataStore?.backupServers) return;
 
-    const now = Date.now();
+  const now = Date.now();
+  for (const [serverId, serverConfig] of Object.entries(metadataStore.backupServers)) {
+    if (!serverConfig.enabled || !serverConfig.backupInterval || serverConfig.backupInterval <= 0) continue;
 
-    for (const [serverId, serverConfig] of Object.entries(metadataStore.backupServers)) {
-      if (!serverConfig.enabled || !serverConfig.backupInterval || serverConfig.backupInterval <= 0) {
-        continue;
+    const intervalMs = serverConfig.backupInterval * 60 * 60 * 1000;
+    const lastBackup = serverConfig.lastBackupAt ?? 0;
+    if (now - lastBackup < intervalMs) continue;
+
+    recordTaskLog("Auto-backup triggered", { backupServerId: serverId });
+    try {
+      const ok = await sendMessage("exportBackupData", {
+        backupServerId: serverId,
+        backupFields: serverConfig.backupFields ?? [],
+      });
+      if (!ok) {
+        reportTaskFailure("Auto-backup returned an unsuccessful result", new Error("exportBackupData returned false"), {
+          backupServerId: serverId,
+        });
       }
-
-      const intervalMs = serverConfig.backupInterval * 60 * 60 * 1000;
-      const lastBackup = serverConfig.lastBackupAt ?? 0;
-
-      if (now - lastBackup >= intervalMs) {
-        sendMessage("logger", {
-          msg: `Auto-backup triggered for [${serverConfig.name}] (interval: ${serverConfig.backupInterval}h)`,
-        }).catch();
-
-        try {
-          const backupFields = serverConfig.backupFields ?? [];
-          const ok = await sendMessage("exportBackupData", {
-            backupServerId: serverId,
-            backupFields,
-          });
-
-          if (!ok) {
-            sendMessage("logger", {
-              msg: `Auto-backup failed for [${serverConfig.name}] (returned false)`,
-            }).catch();
-          }
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          sendMessage("logger", {
-            msg: `Auto-backup failed for [${serverConfig.name}]: ${errMsg}`,
-          }).catch();
-        }
-      }
+    } catch (error) {
+      reportTaskFailure("Auto-backup failed", error, { backupServerId: serverId });
     }
-  };
+  }
 }
 
-// reDownloadTorrent 需要完整 downloadOption，Rust schedule_redownload 只回调 downloadId，
-// 故在此内存 map 暂存 downloadId -> downloadOption。
 const pendingRedownloads = new Map<number, IDownloadTorrentOption>();
 
-onMessage("reDownloadTorrent", async ({ data }) => {
+async function markRedownloadFailed(downloadId: number, operation: string) {
+  try {
+    await sendMessage("setDownloadHistoryStatus", { downloadId, status: "failed" });
+  } catch (error) {
+    reportTaskFailure(`${operation}; failed to persist retry status`, error);
+  }
+}
+
+export async function handleReDownload(data: IDownloadTorrentOption & { downloadId: number; leftInterval: number }) {
   if (data.leftInterval < 30 * 1000) {
     await sleep(data.leftInterval);
     try {
       await sendMessage("downloadTorrent", data);
-    } catch {
-      sendMessage("setDownloadHistoryStatus", { downloadId: data.downloadId, status: "failed" }).catch();
+    } catch (error) {
+      reportTaskFailure("Delayed torrent retry failed", error);
+      await markRedownloadFailed(data.downloadId, "Delayed torrent retry failed");
     }
-  } else {
-    pendingRedownloads.set(data.downloadId, data);
-    invoke("schedule_redownload", { downloadId: String(data.downloadId), delaySecs: 30 }).catch(() => {
-      sendMessage("setDownloadHistoryStatus", { downloadId: data.downloadId, status: "failed" }).catch();
-    });
+    return;
   }
-});
 
-// 监听 Rust scheduler event，触发对应业务
-listen("scheduler://flush-user-info", () => autoFlushUserInfo()().catch(() => {})).catch(() => {});
-listen("scheduler://auto-backup", () => autoBackup()().catch(() => {})).catch(() => {});
-listen<string>("scheduler://redownload", (event) => {
-  const downloadId = Number(event.payload);
-  const opt = pendingRedownloads.get(downloadId);
-  if (opt) {
-    pendingRedownloads.delete(downloadId);
-    sendMessage("downloadTorrent", opt).catch(() => {
-      sendMessage("setDownloadHistoryStatus", { downloadId, status: "failed" }).catch();
-    });
+  pendingRedownloads.set(data.downloadId, data);
+  try {
+    await invoke("schedule_redownload", { downloadId: String(data.downloadId), delaySecs: 30 });
+  } catch (error) {
+    pendingRedownloads.delete(data.downloadId);
+    reportTaskFailure("Failed to schedule delayed torrent retry", error);
+    await markRedownloadFailed(data.downloadId, "Failed to schedule delayed torrent retry");
+    throw error;
   }
-}).catch(() => {});
+}
+
+export async function handleScheduledRedownload(downloadId: number): Promise<void> {
+  const option = pendingRedownloads.get(downloadId);
+  if (!option) {
+    reportTaskFailure("Scheduled torrent retry had no pending download", new Error(`Missing download ${downloadId}`));
+    return;
+  }
+
+  pendingRedownloads.delete(downloadId);
+  try {
+    await sendMessage("downloadTorrent", option);
+  } catch (error) {
+    reportTaskFailure("Scheduled torrent retry failed", error);
+    await markRedownloadFailed(downloadId, "Scheduled torrent retry failed");
+  }
+}
+
+onMessage("reDownloadTorrent", async ({ data }) => await handleReDownload(data));
+
+export function registerSchedulerListeners() {
+  void listen("scheduler://flush-user-info", () => {
+    runBackgroundTask("Auto-refresh scheduler event failed", () => runAutoFlushUserInfo());
+  }).catch((error) => reportTaskFailure("Failed to register auto-refresh scheduler listener", error));
+
+  void listen("scheduler://auto-backup", () => {
+    runBackgroundTask("Auto-backup scheduler event failed", runAutoBackup);
+  }).catch((error) => reportTaskFailure("Failed to register auto-backup scheduler listener", error));
+
+  void listen<string>("scheduler://redownload", (event) => {
+    runBackgroundTask("Scheduled torrent retry event failed", () => handleScheduledRedownload(Number(event.payload)));
+  }).catch((error) => reportTaskFailure("Failed to register torrent retry scheduler listener", error));
+}
+
+registerSchedulerListeners();

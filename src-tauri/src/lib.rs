@@ -1,6 +1,5 @@
 mod download;
 mod http;
-mod notification;
 mod scheduler;
 mod state;
 mod storage;
@@ -18,8 +17,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let state = AppState::load(app.handle()).map_err(std::io::Error::other)?;
             if let Some(diagnostic) = state.startup_diagnostic() {
@@ -42,7 +39,6 @@ pub fn run() {
             storage::get_ext_storage,
             storage::set_ext_storage,
             download::download_to_local,
-            notification::show_notification,
             scheduler::schedule_redownload,
         ])
         .run(tauri::generate_context!())

@@ -53,7 +53,9 @@ export const useConfigStore = defineStore("config", {
       }
 
       if (needsSave) {
-        context.store.$save();
+        void context.store.$save().catch((error) => {
+          console.error("[pinia] Failed to persist normalized config after restore", error);
+        });
       }
     },
   },
@@ -347,7 +349,9 @@ export const useConfigStore = defineStore("config", {
       // @ts-ignore
       this.tableBehavior[table][key] = data;
       if (this.saveTableBehavior) {
-        this.$save();
+        void this.$save().catch((error) => {
+          console.error("[pinia] Failed to persist table behavior", error);
+        });
       }
     },
   },

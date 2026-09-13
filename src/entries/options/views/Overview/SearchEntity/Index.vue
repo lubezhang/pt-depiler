@@ -33,6 +33,12 @@ const metadataStore = useMetadataStore();
 const runtimeStore = useRuntimeStore();
 const display = useDisplay();
 
+function saveSearchEntityPreferences() {
+  void configStore.$save().catch((error) => {
+    console.error("[pinia] Failed to save search preferences", error);
+  });
+}
+
 const showAdvanceFilterGenerateDialog = ref<boolean>(false);
 const showSearchStatusDialog = ref<boolean>(false);
 const showSaveSnapshotDialog = ref<boolean>(false);
@@ -305,7 +311,7 @@ const hiddenTagNamesText = computed({
                     density="compact"
                     hide-details
                     @click.stop
-                    @update:model-value="() => configStore.$save()"
+                    @update:model-value="saveSearchEntityPreferences"
                   />
                 </v-list-item-action>
               </template>

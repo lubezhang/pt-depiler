@@ -10,6 +10,17 @@ import { MutationType, PiniaPluginContext } from "pinia";
 
 import { extStorage } from "@/storage.ts";
 
+export class PiniaPersistenceSaveError extends Error {
+  readonly code = "PINIA_PERSISTENCE_SAVE_FAILED";
+  readonly storageKey: string;
+
+  constructor(storageKey: string, cause: unknown) {
+    super(`Failed to save persisted Pinia store "${storageKey}"`, { cause });
+    this.name = "PiniaPersistenceSaveError";
+    this.storageKey = storageKey;
+  }
+}
+
 export async function persistent<T>(key: string, newValue: T) {
   await extStorage.setItem(key as never, JSON.parse(JSON.stringify(newValue)) as never);
 }
@@ -28,7 +39,7 @@ export async function restore<T>(key: string, options: restoreOptions<T> = {}): 
   try {
     console.debug("Restoring state for key:", key);
     const fromStorage = await extStorage.getItem(key as never);
-    if (fromStorage) {
+    if (fromStorage !== null) {
       return fromStorage as T;
     } else {
       if (writeDefaults && rawInit !== null) {
@@ -65,6 +76,7 @@ export interface PersistedStateOptions {
   afterRestore?: (context: PiniaPluginContext) => void;
 
   onRestoreError?: (e: any) => void;
+  onSaveError?: (error: PiniaPersistenceSaveError) => void;
 }
 
 declare module "pinia" {
@@ -100,6 +112,7 @@ export function piniaWebExtPersistencePlugin(context: PiniaPluginContext) {
     beforeRestore = null,
     afterRestore = null,
     onRestoreError = null,
+    onSaveError = null,
   } = typeof persistWebExt !== "boolean" ? persistWebExt : {};
 
   const $ready = ref(false);
@@ -126,20 +139,36 @@ export function piniaWebExtPersistencePlugin(context: PiniaPluginContext) {
   const $save = async (newState = store.$state) => {
     try {
       await persistent(key, newState);
-    } catch (_error) {}
+    } catch (error) {
+      throw new PiniaPersistenceSaveError(key, error);
+    }
+  };
+
+  const reportAutoSaveError = (error: unknown) => {
+    const saveError = error instanceof PiniaPersistenceSaveError ? error : new PiniaPersistenceSaveError(key, error);
+    if (onSaveError) {
+      try {
+        onSaveError(saveError);
+      } catch (hookError) {
+        console.error(`[pinia] Failed to report automatic save error for store "${store.$id}"`, hookError);
+      }
+    } else {
+      console.error(`[pinia] Failed to automatically save store "${store.$id}"`, saveError);
+    }
   };
 
   if (autoSaveType && Array.isArray(autoSaveType)) {
     store.$subscribe((mutation, state: any) => {
       console?.log("Store `" + store.$id + "` change subscribed: ", mutation);
       if (autoSaveType.includes(mutation.type)) {
-        $save(state);
+        void $save(state).catch(reportAutoSaveError);
       }
     });
   }
 
+  const originalDispose = store.$dispose;
   const $dispose = () => {
-    store.$dispose();
+    originalDispose.call(store);
   };
 
   return { $dispose, $save, $ready, $onReady };

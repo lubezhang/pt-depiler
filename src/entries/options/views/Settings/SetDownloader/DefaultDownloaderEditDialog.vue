@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { useRuntimeStore } from "@/options/stores/runtime.ts";
 import type { IDefaultDownloaderConfig, TDownloaderKey } from "@/shared/types/storages/metadata.ts";
 import { useResetableRef } from "@/options/directives/useResetableRef.ts";
 import { getDownloaderIcon } from "@ptd/downloader";
@@ -10,6 +12,8 @@ const showDialog = defineModel<boolean>();
 
 const { t } = useI18n();
 const metadataStore = useMetadataStore();
+const runtimeStore = useRuntimeStore();
+const isSaving = ref(false);
 
 const { ref: defaultDownloaderConfig, reset: resetDefaultDownloaderConfig } = useResetableRef<
   Required<IDefaultDownloaderConfig>
@@ -38,10 +42,18 @@ function updateDefaultDownloaderInput(downloaderId: TDownloaderKey, clean: boole
   };
 }
 
-function saveDefaultDownloader() {
+async function saveDefaultDownloader() {
+  isSaving.value = true;
   metadataStore.defaultDownloader = defaultDownloaderConfig.value;
-  metadataStore.$save();
-  showDialog.value = false;
+  try {
+    await metadataStore.$save();
+    showDialog.value = false;
+  } catch (error) {
+    console.error("[pinia] Failed to save the default downloader", error);
+    runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
+  } finally {
+    isSaving.value = false;
+  }
 }
 
 function enterDialog() {
@@ -104,7 +116,14 @@ function enterDialog() {
       <v-divider />
       <v-card-actions>
         <v-spacer />
-        <v-btn color="success" prepend-icon="mdi-check-circle-outline" variant="text" @click="saveDefaultDownloader">
+        <v-btn
+          :disabled="isSaving"
+          :loading="isSaving"
+          color="success"
+          prepend-icon="mdi-check-circle-outline"
+          variant="text"
+          @click="saveDefaultDownloader"
+        >
           {{ t("common.dialog.ok") }}
         </v-btn>
       </v-card-actions>

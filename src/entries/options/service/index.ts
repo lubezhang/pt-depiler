@@ -4,6 +4,8 @@
  * Tauri 单进程模型下，options 进程加载此模块即完成所有业务 handler 注册，
  * sendMessage（见 @/messages.ts 单进程本地路由）可直接调到。
  */
+import { assertAllProtocolHandlersRegistered } from "@/messages.ts";
+
 // 业务核心：search/download/userInfo/backup/social/keepUpload/logger/site
 import "@/offscreen/offscreen.ts";
 
@@ -16,6 +18,9 @@ import "@/background/utils/cookies.ts";
 // 定时任务：监听 Rust scheduler event + reDownloadTorrent
 import "@/background/utils/alarms.ts";
 
+assertAllProtocolHandlersRegistered();
+
 // 启动时修复存储中的坏数据
-import { fixAllStoredUserInfo } from "@/background/utils/fixer.ts";
-fixAllStoredUserInfo().catch();
+import { startStoredUserInfoRepair } from "./startup.ts";
+
+startStoredUserInfoRepair();

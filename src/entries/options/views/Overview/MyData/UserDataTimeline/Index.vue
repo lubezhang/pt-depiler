@@ -41,6 +41,7 @@ const route = useRoute();
 const router = useRouter();
 const configStore = useConfigStore();
 const metadataStore = useMetadataStore();
+const runtimeStore = useRuntimeStore();
 const control = configStore.userDataTimelineControl;
 
 const isLoading = ref<boolean>(false);
@@ -223,10 +224,15 @@ function exportTimelineImg() {
   });
 }
 
-function saveControl() {
+async function saveControl() {
   configStore.userDataTimelineControl.selectedSites = selectedSites.value;
-  configStore.$save();
-  useRuntimeStore().showSnakebar(t("common.saveSuccess"), { color: "success" });
+  try {
+    await configStore.$save();
+    runtimeStore.showSnakebar(t("common.saveSuccess"), { color: "success" });
+  } catch (error) {
+    console.error("[pinia] Failed to save user data timeline settings", error);
+    runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
+  }
 }
 </script>
 

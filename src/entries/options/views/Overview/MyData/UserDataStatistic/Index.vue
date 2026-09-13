@@ -51,6 +51,7 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const configStore = useConfigStore();
+const runtimeStore = useRuntimeStore();
 const chartContainerRef = useTemplateRef<HTMLDivElement>("chartContainer");
 const { width: containerWidth } = useElementSize(chartContainerRef);
 const perChartHeight = computed(() => 400);
@@ -419,10 +420,15 @@ async function exportStatisticImg() {
   });
 }
 
-function saveControl() {
+async function saveControl() {
   configStore.userStatisticControl.selectedSites = selectedSites.value;
-  configStore.$save();
-  useRuntimeStore().showSnakebar(t("common.saveSuccess"), { color: "success" });
+  try {
+    await configStore.$save();
+    runtimeStore.showSnakebar(t("common.saveSuccess"), { color: "success" });
+  } catch (error) {
+    console.error("[pinia] Failed to save user data statistic settings", error);
+    runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
+  }
 }
 </script>
 

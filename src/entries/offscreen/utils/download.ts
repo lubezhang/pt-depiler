@@ -35,6 +35,25 @@ type TRemoteDownloadOption = AugmentedRequired<
   "downloadId" | "downloaderId" | "addTorrentOptions"
 >;
 
+function reportDownloadFailure(operation: string, error: unknown) {
+  console.error(`[download] ${operation}`, error);
+  logger({ level: "error", module: "download", msg: operation });
+}
+
+class DownloadStatusPersistenceError extends Error {
+  constructor(downloadStatus: TTorrentDownloadStatus, cause: unknown) {
+    super(`Failed to persist torrent download status "${downloadStatus}"`, { cause });
+    this.name = "DownloadStatusPersistenceError";
+  }
+}
+
+function markDelayedDownloadFailed(downloadId: TTorrentDownloadKey, operation: string, error: unknown) {
+  reportDownloadFailure(operation, error);
+  void setDownloadStatus(downloadId, "failed").catch((statusError) => {
+    reportDownloadFailure(`${operation}; failed to persist download status`, statusError);
+  });
+}
+
 export async function getDownloaderConfig(downloaderId: string) {
   const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
   return metadataStore?.downloaders?.[downloaderId] ?? ({} as IDownloaderMetadata);
@@ -213,10 +232,13 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
 
       if (leftInterval > 0) {
         logger({ msg: `Site ${torrent.site} download interval not reached, waiting...` });
-        sendMessage("reDownloadTorrent", { ...downloadOption, downloadId, leftInterval }).catch();
+        downloadStatus = await setDownloadStatus(downloadId, "pending");
+        void sendMessage("reDownloadTorrent", { ...downloadOption, downloadId, leftInterval }).catch((error) => {
+          markDelayedDownloadFailed(downloadId, "Failed to schedule delayed torrent download", error);
+        });
         return {
           downloadId,
-          downloadStatus: await setDownloadStatus(downloadId, "pending"),
+          downloadStatus,
         } as IDownloadTorrentResult;
       }
 
@@ -233,7 +255,13 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
       await siteInstance.getTorrentDownloadRequestConfig(torrent as ITorrent),
     );
   }
-  await patchDownloadHistory(downloadId!, { downloadRequestConfig }).catch(); // 存储下载请求配置，方便后续调试
+  try {
+    await patchDownloadHistory(downloadId!, { downloadRequestConfig });
+  } catch (error) {
+    reportDownloadFailure("Failed to persist torrent download request diagnostics", error);
+    downloadStatus = "failed";
+    return { downloadId, downloadStatus, errorMessage: getErrorMessage(error) } as IDownloadTorrentResult;
+  }
 
   try {
     downloadStatus = await setDownloadStatus(downloadId, "downloading");
@@ -256,6 +284,7 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
       errorMessage = remoteResult.errorMessage;
     }
   } catch (e) {
+    if (e instanceof DownloadStatusPersistenceError) throw e;
     downloadStatus = "failed";
     errorMessage = getErrorMessage(e);
   }
@@ -303,21 +332,23 @@ async function downloadTorrentToLocalFile(
 
       logger({ msg: `Download torrent file with browser method: ${downloadUri}`, data: downloadOptions });
       await sendMessage("downloadFile", downloadOptions);
-      return await setDownloadStatus(downloadId, "completed");
     } catch (e) {
+      reportDownloadFailure("Browser torrent download failed; falling back to extension download", e);
       localDownloadMethod = "extension"; // 如果下载失败，直接使用 extension 方法（怎么可能？）
     }
+    if (localDownloadMethod === "browser") return await setDownloadStatus(downloadId, "completed");
   } else {
     localDownloadMethod = "extension"; // 如果还是不能使用的情况（怎么可能？），则直接使用 extension 方法
   }
 
   // 兼容旧配置名 extension：由应用获取种子内容，再保存为 Blob。
   if (localDownloadMethod === "extension") {
+    let torrentUrl: string | undefined;
     try {
       logger({ msg: `Download torrent file with extension method: ${downloadUri}`, data: downloadRequestConfig });
 
       const torrentInstance = await getRemoteTorrentFile(downloadRequestConfig);
-      const torrentUrl = URL.createObjectURL(torrentInstance.metadata.blob());
+      torrentUrl = URL.createObjectURL(torrentInstance.metadata.blob());
       let filename = torrentInstance.name;
       if (filename === "1.torrent") {
         // 如果文件名是缺省的 1.torrent，那么使用种子属性中的站点名和标题作为文件名
@@ -325,11 +356,14 @@ async function downloadTorrentToLocalFile(
       }
 
       await sendMessage("downloadFile", { url: torrentUrl, filename });
-      downloadStatus = await setDownloadStatus(downloadId, "completed");
-      URL.revokeObjectURL(torrentUrl);
     } catch (e) {
-      downloadStatus = await setDownloadStatus(downloadId, "failed");
+      reportDownloadFailure("Extension torrent download failed", e);
+      return await setDownloadStatus(downloadId, "failed");
+    } finally {
+      if (torrentUrl) URL.revokeObjectURL(torrentUrl);
     }
+
+    return await setDownloadStatus(downloadId, "completed");
   }
 
   return downloadStatus;
@@ -365,7 +399,11 @@ async function downloadTorrentToRemote(
         logger({ msg: "Failed to add torrent to downloader", data: loggerData });
         errorMessage = getErrorMessage(addTorrentResult?.message || "Downloader rejected the torrent");
       }
-      patchDownloadHistory(downloadId, { addTorrentResult }).catch(); // 存储添加种子结果，方便后续调试
+      try {
+        await patchDownloadHistory(downloadId, { addTorrentResult });
+      } catch (error) {
+        reportDownloadFailure("Failed to persist downloader response diagnostics", error);
+      }
     } catch (e) {
       logger({ msg: "Error adding torrent to downloader", data: loggerData });
       errorMessage = getErrorMessage(e);
@@ -382,7 +420,7 @@ function getErrorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   try {
     return JSON.stringify(error);
-  } catch {
+  } catch (_serializationError) {
     return String(error);
   }
 }
@@ -416,9 +454,18 @@ async function setDownloadStatus(
   downloadId: TTorrentDownloadKey,
   downloadStatus: TTorrentDownloadStatus,
 ): Promise<TTorrentDownloadStatus> {
-  await patchDownloadHistory(downloadId, { downloadStatus }).catch();
+  try {
+    await patchDownloadHistory(downloadId, { downloadStatus });
+  } catch (error) {
+    reportDownloadFailure(`Failed to persist torrent download status "${downloadStatus}"`, error);
+    throw new DownloadStatusPersistenceError(downloadStatus, error);
+  }
   return downloadStatus;
 }
+
+onMessage("setDownloadHistoryStatus", async ({ data: { downloadId, status } }) => {
+  await setDownloadStatus(downloadId, status);
+});
 
 export async function deleteDownloadHistoryById(downloadId: TTorrentDownloadKey) {
   return await (await ptdIndexDb).delete("download_history", downloadId);
