@@ -745,7 +745,7 @@
       "formFallback": "备用：直接提交账号密码",
       "loginPath": "登录页路径",
       "loginPathHint": "留空时按站点类型使用默认路径；仅在站点登录页不在默认位置时填写，如 /login.php",
-      "notice": "推荐在应用内打开站点原始登录页，可完成验证码、二次验证和 SSO。同步后的 Cookie 将加密保存并用于后续站点请求。",
+      "notice": "推荐在应用内打开站点原始登录页，可完成验证码、二次验证和 SSO。同步后的 Cookie 将保存在本地并用于后续站点请求。",
       "open": "登录并获取 Cookie",
       "openBrowser": "打开站点登录页面",
       "password": "密码",

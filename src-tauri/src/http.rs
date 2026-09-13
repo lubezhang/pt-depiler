@@ -1521,9 +1521,8 @@ mod tests {
     #[test]
     fn persists_cookie_scope_attributes_and_deletions() {
         let directory = tempfile::tempdir().expect("temporary cookie directory");
-        let cookie_file = directory.path().join("cookies.enc");
-        let key = [23_u8; 32];
-        let state = AppState::persistent_for_test(cookie_file.clone(), key);
+        let cookie_file = directory.path().join("cookies.v2.json");
+        let state = AppState::persistent_for_test(cookie_file.clone());
         let cookie = |name: &str, path: &str, value: &str, host_only: bool| CookieInfo {
             name: name.to_string(),
             value: value.to_string(),
@@ -1546,7 +1545,7 @@ mod tests {
         set_cookie_with_state(cookie("shared", "/", "domain", false), &state)
             .expect("set domain cookie");
 
-        let restored = AppState::persistent_for_test(cookie_file.clone(), key);
+        let restored = AppState::persistent_for_test(cookie_file.clone());
         let root = Url::parse("https://tracker.example/").expect("root URL");
         let account = Url::parse("https://tracker.example/account/profile").expect("account URL");
         let subdomain = Url::parse("https://sub.tracker.example/").expect("subdomain URL");
@@ -1588,7 +1587,7 @@ mod tests {
             &restored,
         )
         .expect("remove longest path cookie");
-        let after_delete = AppState::persistent_for_test(cookie_file, key);
+        let after_delete = AppState::persistent_for_test(cookie_file);
         let after_delete_store = after_delete.cookie_store.lock().expect("cookie store lock");
         let remaining: Vec<_> = after_delete_store
             .get_request_values(&account)

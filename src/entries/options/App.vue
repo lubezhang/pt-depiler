@@ -2,7 +2,6 @@
 import { watch, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useLocale as useVuetifyLocal } from "vuetify";
-import { useDevicePixelRatio } from "@vueuse/core";
 
 import { useConfigStore } from "@/options/stores/config.ts";
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
@@ -27,14 +26,6 @@ watch(
   { immediate: true },
 );
 
-const { pixelRatio } = useDevicePixelRatio();
-function setIgnoreWrongPixelRatio() {
-  configStore.ignoreWrongPixelRatio = true;
-  void configStore.$save().catch((error) => {
-    console.error("[pinia] Failed to save the pixel ratio preference", error);
-  });
-}
-
 const showReleaseNoteDialog = ref<boolean>(false);
 
 // 由于App.vue是整个应用的根组件，此时 configStore 等 pinia store 可能还未初始化完成，所以需要监听 $onReady
@@ -47,16 +38,6 @@ configStore.$onReady(() => {
 
 <template>
   <v-app id="ptd" :theme="configStore.uiTheme">
-    <!-- 页面比例提示 -->
-    <v-system-bar
-      v-if="(pixelRatio > 1.1 || pixelRatio < 0.8) && !configStore.ignoreWrongPixelRatio"
-      class="justify-center"
-      color="purple-darken-2"
-    >
-      {{ t("layout.header.wrongPixelRatioNotice") }}&nbsp;&nbsp;
-      <v-icon class="ms-2" icon="mdi-close" @click="setIgnoreWrongPixelRatio" />
-    </v-system-bar>
-
     <!-- 顶部工具条 -->
     <Topbar />
 

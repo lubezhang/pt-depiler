@@ -5,10 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use aes_gcm::aead::{rand_core::RngCore, Aead, KeyInit, OsRng, Payload};
-use aes_gcm::{Aes256Gcm, Nonce};
-#[cfg(debug_assertions)]
-use base64::{engine::general_purpose::STANDARD, Engine};
 use cookie_store::CookieStore;
 use reqwest::Client;
 use reqwest_cookie_store::CookieStoreMutex;
@@ -16,15 +12,8 @@ use tauri::Manager;
 use tempfile::NamedTempFile;
 use tokio::sync::oneshot;
 
-const COOKIE_FILE_NAME: &str = "cookies.v1.enc";
-const COOKIE_FILE_MAGIC: &[u8] = b"PTDCOOKIE\x01";
-const COOKIE_KEY_SERVICE: &str = "com.ptplugins.pt-depiler";
-const COOKIE_KEY_ACCOUNT: &str = "cookie-store-v1";
-const KEY_LENGTH: usize = 32;
-const NONCE_LENGTH: usize = 12;
+const COOKIE_FILE_NAME: &str = "cookies.v2.json";
 const EARLY_HTTP_CANCELLATION_TTL: Duration = Duration::from_secs(30);
-#[cfg(debug_assertions)]
-const E2E_COOKIE_KEY_ENV: &str = "PTD_E2E_COOKIE_KEY_BASE64";
 #[cfg(debug_assertions)]
 const E2E_DATA_DIR_ENV: &str = "PTD_E2E_DATA_DIR";
 
@@ -36,12 +25,11 @@ struct HttpCancellationRegistry {
 
 struct CookiePersistence {
     path: PathBuf,
-    key: [u8; KEY_LENGTH],
 }
 
 impl CookiePersistence {
-    fn load(path: PathBuf, key: [u8; KEY_LENGTH]) -> (Self, CookieStore, Option<String>) {
-        let persistence = Self { path, key };
+    fn load(path: PathBuf) -> (Self, CookieStore, Option<String>) {
+        let persistence = Self { path };
         if !persistence.path.exists() {
             return (persistence, CookieStore::default(), None);
         }
@@ -59,23 +47,7 @@ impl CookiePersistence {
     }
 
     fn read_store(&self) -> Result<CookieStore, String> {
-        let encrypted = fs::read(&self.path).map_err(|error| error.to_string())?;
-        let prefix_length = COOKIE_FILE_MAGIC.len() + NONCE_LENGTH;
-        if encrypted.len() <= prefix_length || !encrypted.starts_with(COOKIE_FILE_MAGIC) {
-            return Err("Cookie 文件格式无效".to_string());
-        }
-
-        let cipher = Aes256Gcm::new_from_slice(&self.key).map_err(|error| error.to_string())?;
-        let nonce = Nonce::from_slice(&encrypted[COOKIE_FILE_MAGIC.len()..prefix_length]);
-        let plaintext = cipher
-            .decrypt(
-                nonce,
-                Payload {
-                    msg: &encrypted[prefix_length..],
-                    aad: COOKIE_FILE_MAGIC,
-                },
-            )
-            .map_err(|_| "Cookie 文件认证失败".to_string())?;
+        let plaintext = fs::read(&self.path).map_err(|error| error.to_string())?;
         cookie_store::serde::json::load(Cursor::new(plaintext)).map_err(|error| error.to_string())
     }
 
@@ -87,24 +59,9 @@ impl CookiePersistence {
         cookie_store::serde::json::save_incl_expired_and_nonpersistent(store, &mut plaintext)
             .map_err(|error| error.to_string())?;
 
-        let cipher = Aes256Gcm::new_from_slice(&self.key).map_err(|error| error.to_string())?;
-        let mut nonce_bytes = [0_u8; NONCE_LENGTH];
-        OsRng.fill_bytes(&mut nonce_bytes);
-        let ciphertext = cipher
-            .encrypt(
-                Nonce::from_slice(&nonce_bytes),
-                Payload {
-                    msg: &plaintext,
-                    aad: COOKIE_FILE_MAGIC,
-                },
-            )
-            .map_err(|_| "Cookie 文件加密失败".to_string())?;
-
         let mut temporary = NamedTempFile::new_in(parent).map_err(|error| error.to_string())?;
         temporary
-            .write_all(COOKIE_FILE_MAGIC)
-            .and_then(|_| temporary.write_all(&nonce_bytes))
-            .and_then(|_| temporary.write_all(&ciphertext))
+            .write_all(&plaintext)
             .and_then(|_| temporary.flush())
             .and_then(|_| temporary.as_file().sync_all())
             .map_err(|error| error.to_string())?;
@@ -145,14 +102,13 @@ impl AppState {
 
     pub fn load(app: &tauri::AppHandle) -> Result<Self, String> {
         #[cfg(debug_assertions)]
-        if let Some((app_data_dir, key)) = load_e2e_cookie_config()? {
+        if let Some(app_data_dir) = load_e2e_data_dir()? {
             eprintln!(
                 "PT-depiler debug E2E Cookie Store is active at {}",
                 app_data_dir.display()
             );
             return Ok(Self::with_persistence(
                 app_data_dir.join(COOKIE_FILE_NAME),
-                key,
                 true,
             ));
         }
@@ -161,22 +117,20 @@ impl AppState {
             .path()
             .app_data_dir()
             .map_err(|error| error.to_string())?;
-        let key = load_or_create_key()?;
         Ok(Self::with_persistence(
             app_data_dir.join(COOKIE_FILE_NAME),
-            key,
             true,
         ))
     }
 
-    fn with_persistence(path: PathBuf, key: [u8; KEY_LENGTH], use_system_proxy: bool) -> Self {
-        let (persistence, store, diagnostic) = CookiePersistence::load(path, key);
+    fn with_persistence(path: PathBuf, use_system_proxy: bool) -> Self {
+        let (persistence, store, diagnostic) = CookiePersistence::load(path);
         Self::from_store(store, Some(persistence), diagnostic, use_system_proxy)
     }
 
     #[cfg(test)]
-    pub(crate) fn persistent_for_test(path: PathBuf, key: [u8; KEY_LENGTH]) -> Self {
-        Self::with_persistence(path, key, false)
+    pub(crate) fn persistent_for_test(path: PathBuf) -> Self {
+        Self::with_persistence(path, false)
     }
 
     fn from_store(
@@ -267,29 +221,11 @@ impl AppState {
 }
 
 #[cfg(debug_assertions)]
-fn decode_e2e_cookie_key(encoded: &str) -> Result<[u8; KEY_LENGTH], String> {
-    let secret = STANDARD
-        .decode(encoded.trim())
-        .map_err(|_| format!("{E2E_COOKIE_KEY_ENV} 不是有效的 Base64"))?;
-    secret.try_into().map_err(|secret: Vec<u8>| {
-        format!(
-            "{E2E_COOKIE_KEY_ENV} 解码后必须为 {KEY_LENGTH} 字节，实际为 {} 字节",
-            secret.len()
-        )
-    })
-}
-
-#[cfg(debug_assertions)]
-fn load_e2e_cookie_config() -> Result<Option<(PathBuf, [u8; KEY_LENGTH])>, String> {
-    let Some(encoded_key) = std::env::var_os(E2E_COOKIE_KEY_ENV) else {
+fn load_e2e_data_dir() -> Result<Option<PathBuf>, String> {
+    let Some(data_dir) = std::env::var_os(E2E_DATA_DIR_ENV) else {
         return Ok(None);
     };
-    let encoded_key = encoded_key
-        .into_string()
-        .map_err(|_| format!("{E2E_COOKIE_KEY_ENV} 必须是 UTF-8 文本"))?;
-    let data_dir = std::env::var_os(E2E_DATA_DIR_ENV)
-        .map(PathBuf::from)
-        .ok_or_else(|| format!("设置 {E2E_COOKIE_KEY_ENV} 时必须同时设置 {E2E_DATA_DIR_ENV}"))?;
+    let data_dir = PathBuf::from(data_dir);
     if !data_dir.is_absolute() {
         return Err(format!("{E2E_DATA_DIR_ENV} 必须是绝对路径"));
     }
@@ -299,33 +235,13 @@ fn load_e2e_cookie_config() -> Result<Option<(PathBuf, [u8; KEY_LENGTH])>, Strin
             data_dir.display()
         )
     })?;
-    Ok(Some((data_dir, decode_e2e_cookie_key(&encoded_key)?)))
+    Ok(Some(data_dir))
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn load_or_create_key() -> Result<[u8; KEY_LENGTH], String> {
-    let entry = keyring::Entry::new(COOKIE_KEY_SERVICE, COOKIE_KEY_ACCOUNT)
-        .map_err(|error| format!("无法访问系统安全存储: {error}"))?;
-    let secret = match entry.get_secret() {
-        Ok(secret) => secret,
-        Err(keyring::Error::NoEntry) => {
-            let mut secret = vec![0_u8; KEY_LENGTH];
-            OsRng.fill_bytes(&mut secret);
-            entry
-                .set_secret(&secret)
-                .map_err(|error| format!("无法写入系统安全存储: {error}"))?;
-            secret
-        }
-        Err(error) => return Err(format!("无法读取系统安全存储: {error}")),
-    };
-    secret.try_into().map_err(|secret: Vec<u8>| {
-        format!("系统安全存储中的 Cookie 密钥长度无效: {}", secret.len())
-    })
 }
 
 #[cfg(test)]
@@ -336,8 +252,8 @@ mod tests {
     use std::thread;
     use url::Url;
 
-    fn persistent_state(directory: &Path, key: [u8; KEY_LENGTH]) -> AppState {
-        AppState::with_persistence(directory.join(COOKIE_FILE_NAME), key, false)
+    fn persistent_state(directory: &Path) -> AppState {
+        AppState::with_persistence(directory.join(COOKIE_FILE_NAME), false)
     }
 
     fn insert_cookie(state: &AppState, value: &str) {
@@ -354,30 +270,17 @@ mod tests {
     }
 
     #[test]
-    fn validates_debug_e2e_cookie_key_length() {
-        let encoded = STANDARD.encode([23_u8; KEY_LENGTH]);
-        assert_eq!(
-            decode_e2e_cookie_key(&encoded).expect("valid E2E key"),
-            [23_u8; KEY_LENGTH]
-        );
-        assert!(decode_e2e_cookie_key(&STANDARD.encode([1_u8; KEY_LENGTH - 1])).is_err());
-        assert!(decode_e2e_cookie_key("not-base64").is_err());
-    }
-
-    #[test]
-    fn encrypts_and_restores_session_cookies() {
+    fn persists_and_restores_session_cookies_as_json() {
         let directory = tempfile::tempdir().expect("temporary app data");
-        let key = [7_u8; KEY_LENGTH];
-        let state = persistent_state(directory.path(), key);
+        let state = persistent_state(directory.path());
         insert_cookie(&state, "plain-secret-value");
-        state.persist_cookies().expect("persist encrypted cookies");
+        state.persist_cookies().expect("persist cookies");
 
-        let bytes =
-            fs::read(directory.path().join(COOKIE_FILE_NAME)).expect("encrypted cookie file");
-        assert!(bytes.starts_with(COOKIE_FILE_MAGIC));
-        assert!(!String::from_utf8_lossy(&bytes).contains("plain-secret-value"));
+        let persisted = fs::read_to_string(directory.path().join(COOKIE_FILE_NAME))
+            .expect("plain JSON cookie file");
+        assert!(persisted.contains("plain-secret-value"));
 
-        let restored = persistent_state(directory.path(), key);
+        let restored = persistent_state(directory.path());
         let url = Url::parse("https://tracker.example/").expect("request URL");
         let values: Vec<_> = restored
             .cookie_store
@@ -398,7 +301,7 @@ mod tests {
         fs::write(directory.path().join(COOKIE_FILE_NAME), b"corrupted")
             .expect("write corrupted cookie file");
 
-        let state = persistent_state(directory.path(), [9_u8; KEY_LENGTH]);
+        let state = persistent_state(directory.path());
 
         assert!(state.startup_diagnostic().is_some());
         assert_eq!(
@@ -415,14 +318,13 @@ mod tests {
     #[test]
     fn interrupted_write_leaves_previous_cookie_file_readable() {
         let directory = tempfile::tempdir().expect("temporary app data");
-        let key = [11_u8; KEY_LENGTH];
-        let state = persistent_state(directory.path(), key);
+        let state = persistent_state(directory.path());
         insert_cookie(&state, "old-value");
         state.persist_cookies().expect("persist original cookies");
         fs::write(directory.path().join("interrupted.tmp"), b"partial")
             .expect("simulate interrupted temporary write");
 
-        let restored = persistent_state(directory.path(), key);
+        let restored = persistent_state(directory.path());
         let url = Url::parse("https://tracker.example/").expect("request URL");
         assert_eq!(
             restored
@@ -439,7 +341,6 @@ mod tests {
     fn startup_discards_expired_cookies() {
         let directory = tempfile::tempdir().expect("temporary app data");
         let path = directory.path().join(COOKIE_FILE_NAME);
-        let key = [13_u8; KEY_LENGTH];
         let url = Url::parse("https://tracker.example/").expect("cookie URL");
         let raw = Cookie::parse("expired=old; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
             .expect("expired cookie")
@@ -449,14 +350,11 @@ mod tests {
             .into_owned();
         let store = CookieStore::from_cookies(std::iter::once(Ok::<_, String>(stored)), true)
             .expect("store with expired cookie");
-        CookiePersistence {
-            path: path.clone(),
-            key,
-        }
-        .persist(&store)
-        .expect("persist expired cookie fixture");
+        CookiePersistence { path: path.clone() }
+            .persist(&store)
+            .expect("persist expired cookie fixture");
 
-        let restored = AppState::persistent_for_test(path, key);
+        let restored = AppState::persistent_for_test(path);
 
         assert_eq!(
             restored
@@ -474,8 +372,7 @@ mod tests {
         const COOKIE_COUNT: usize = 12;
         let directory = tempfile::tempdir().expect("temporary app data");
         let path = directory.path().join(COOKIE_FILE_NAME);
-        let key = [17_u8; KEY_LENGTH];
-        let state = Arc::new(AppState::persistent_for_test(path.clone(), key));
+        let state = Arc::new(AppState::persistent_for_test(path.clone()));
         let barrier = Arc::new(Barrier::new(COOKIE_COUNT));
         let mut workers = Vec::new();
 
@@ -501,7 +398,7 @@ mod tests {
             worker.join().expect("cookie worker");
         }
 
-        let restored = AppState::persistent_for_test(path, key);
+        let restored = AppState::persistent_for_test(path);
         let names: Vec<_> = restored
             .cookie_store
             .lock()

@@ -745,7 +745,7 @@
       "formFallback": "Fallback: submit credentials directly",
       "loginPath": "Login page path",
       "loginPathHint": "Leave empty to use the schema default. Set it only when the site's login page is elsewhere, for example /login.php.",
-      "notice": "Open the site's original login page inside the app to complete CAPTCHA, two-factor authentication, or SSO. Synced cookies are encrypted and used for later site requests.",
+      "notice": "Open the site's original login page inside the app to complete CAPTCHA, two-factor authentication, or SSO. Synced cookies are stored locally and used for later site requests.",
       "open": "Log in and get cookies",
       "openBrowser": "Open site login page",
       "password": "Password",

@@ -28,16 +28,6 @@ cookie_store = "0.22"
 reqwest_cookie_store = "0.9"
 tempfile = "3"
 libc = "0.2"
-aes-gcm = "0.10"
-
-[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-keyring = { version = "3.6", default-features = false, features = ["linux-native-sync-persistent", "crypto-rust", "vendored"] }
 
 [features]
 # this feature is used for production builds where `devUrl` is not used

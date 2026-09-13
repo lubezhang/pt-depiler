@@ -2,7 +2,11 @@
 
 import { parseTimeToLiveToDate, parseTimeToLiveToSeconds, parseValidTimeString } from "./datetime.ts";
 import { parseSizeString } from "./filesize.ts";
-import { socialParseUrlMap } from "@ptd/social/index.ts";
+import { parse as parseAnidb } from "@ptd/social/entity/anidb.ts";
+import { parse as parseBangumi } from "@ptd/social/entity/bangumi.ts";
+import { parse as parseDouban } from "@ptd/social/entity/douban.ts";
+import { parse as parseImdb } from "@ptd/social/entity/imdb.ts";
+import { parse as parseTvmaze } from "@ptd/social/entity/tvmaze.ts";
 
 export function tryToNumber(value: any): number {
   if (typeof value === "string") {
@@ -187,11 +191,11 @@ export const definedFilters: Record<string, TQueryFilterFn> = {
   },
 
   // Social Site Parser
-  extAnidbId: socialParseUrlMap.anidb,
-  extBangumiId: socialParseUrlMap.bangumi,
-  extDoubanId: socialParseUrlMap.douban,
-  extImdbId: socialParseUrlMap.imdb,
-  extTvmazeId: socialParseUrlMap.tvmaze,
+  extAnidbId: parseAnidb,
+  extBangumiId: parseBangumi,
+  extDoubanId: parseDouban,
+  extImdbId: parseImdb,
+  extTvmazeId: parseTvmaze,
 
   /**
    * Print the query to the console.
