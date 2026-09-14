@@ -179,6 +179,113 @@
       "upSpeed": "上传速度"
     }
   },
+  "DownloadServiceManager": {
+    "title": "下载服务管理 / {name}",
+    "open": "管理下载服务",
+    "unsupported": "暂不支持管理此下载器",
+    "disabled": "下载服务未启用，请先在设置中启用",
+    "missing": "下载服务配置不存在或已被删除",
+    "backToSettings": "返回下载器设置",
+    "refresh": "刷新",
+    "start": "开始",
+    "stop": "暂停",
+    "remove": "删除",
+    "removeWithData": "删除 Torrent 和数据",
+    "search": "搜索名称、InfoHash、标签或保存路径",
+    "columns": "列配置",
+    "settings": {
+      "title": "下载服务设置",
+      "defaultDownloadDirectory": "默认下载目录（远程主机）",
+      "defaultDownloadDirectoryHint": "新添加的种子将默认保存到此目录。",
+      "directoryRequired": "请填写默认下载目录。",
+      "loadDirectoryFailed": "无法读取服务端默认下载目录。",
+      "saveDirectoryFailed": "无法更新服务端默认下载目录。"
+    },
+    "filters": {
+      "title": "种子筛选",
+      "all": "所有种子",
+      "downloading": "下载中",
+      "completed": "已完成",
+      "active": "活动",
+      "inactive": "非活动",
+      "stopped": "已停止",
+      "error": "错误",
+      "waiting": "等待",
+      "folders": "保存路径"
+    },
+    "detail": {
+      "none": "未选择种子",
+      "overview": "概览",
+      "files": "文件",
+      "trackers": "Tracker",
+      "state": "状态",
+      "progress": "进度",
+      "size": "大小",
+      "ratio": "分享率",
+      "downloadSpeed": "下载速度",
+      "uploadSpeed": "上传速度",
+      "savePath": "保存路径",
+      "addedAt": "添加时间",
+      "noTrackers": "暂无 Tracker",
+      "noFiles": "暂无文件",
+      "fileName": "文件名",
+      "fileSize": "大小",
+      "fileProgress": "已完成",
+      "fileWanted": "下载",
+      "fileWantedYes": "下载此文件",
+      "fileWantedNo": "跳过此文件",
+      "filePriority": {
+        "title": "优先级",
+        "high": "高",
+        "normal": "正常",
+        "low": "低"
+      }
+    },
+    "overview": {
+      "downloadSpeed": "下载速度",
+      "uploadSpeed": "上传速度",
+      "sessionDownloaded": "会话下载量",
+      "sessionUploaded": "会话上传量"
+    },
+    "table": {
+      "name": "名称",
+      "label": "标签",
+      "size": "大小",
+      "progress": "进度",
+      "state": "状态",
+      "uploadSpeed": "上传速度",
+      "downloadSpeed": "下载速度",
+      "uploaded": "累计上传",
+      "downloaded": "累计下载",
+      "ratio": "分享率",
+      "path": "保存路径",
+      "addedAt": "添加时间"
+    },
+    "autoRefresh": {
+      "title": "自动刷新",
+      "enable": "启用自动刷新",
+      "interval": "刷新间隔（秒）",
+      "suspended": "连续刷新失败 3 次，已暂停自动刷新。手动刷新可恢复。"
+    },
+    "location": {
+      "action": "设置数据位置",
+      "title": "设置 Torrent 数据位置",
+      "path": "Torrent 数据新位置",
+      "moveData": "同时移动现有 Torrent 数据到新位置",
+      "required": "请填写 Torrent 数据新位置。",
+      "success": "已更新 Torrent 数据位置。",
+      "failed": "无法更新 Torrent 数据位置。"
+    },
+    "operation": {
+      "success": "已完成 {count} 个操作",
+      "partial": "已完成 {success} 个操作，{failed} 个失败"
+    },
+    "delete": {
+      "title": "删除种子",
+      "text": "确认删除选中的 {count} 个种子吗？",
+      "data": "同时删除服务端本地数据"
+    }
+  },
   "MyData": {
     "HistoryDataView": {
       "action": {

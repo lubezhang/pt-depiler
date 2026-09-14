@@ -91,6 +91,7 @@ export interface TorrentClientStatus {
   upData?: number; // 上传总量（对于不同客户端可能是total或者session）
   dlSpeed: number;
   dlData?: number;
+  torrentCount?: number;
 }
 
 export enum CTorrentState {
@@ -128,6 +129,7 @@ export interface CTorrent<RAW = any> {
 
   savePath: string;
   label?: string;
+  trackers?: string[];
   state: CTorrentState;
 
   /**
@@ -155,6 +157,17 @@ export interface CTorrent<RAW = any> {
 
   raw: RAW;
   clientId: string;
+}
+
+/**
+ * A serializable file entry belonging to a torrent.
+ */
+export interface CTorrentFile {
+  name: string;
+  length: number;
+  bytesCompleted: number;
+  wanted: boolean;
+  priority: number;
 }
 
 // 种子筛选方法
@@ -318,4 +331,9 @@ export abstract class AbstractBittorrentClient<T extends DownloaderBaseConfig = 
 
   // 获取种子的 Tracker 列表
   public abstract getTorrentTrackers(torrent: CTorrent): Promise<string[]>;
+
+  // 获取种子文件列表。未实现细粒度文件查询的下载器保持兼容。
+  public async getTorrentFiles(_id: CTorrent["id"]): Promise<CTorrentFile[]> {
+    return [];
+  }
 }

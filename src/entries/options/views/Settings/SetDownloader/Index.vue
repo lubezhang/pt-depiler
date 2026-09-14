@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { computedAsync } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { countBy } from "es-toolkit";
 import type { DataTableHeader } from "vuetify";
 
@@ -24,6 +25,7 @@ import NavButton from "@/options/components/NavButton.vue";
 const { t } = useI18n();
 const metadataStore = useMetadataStore();
 const configStore = useConfigStore();
+const router = useRouter();
 
 const showAddDialog = ref<boolean>(false);
 const showEditDialog = ref<boolean>(false);
@@ -94,6 +96,10 @@ function editDownloaderPathAndTag(downloaderId: TDownloaderKey) {
 function editDownloaderSiteFilter(downloaderId: TDownloaderKey) {
   toEditDownloaderId.value = downloaderId;
   showSiteFilterDialog.value = true;
+}
+
+function manageDownloadService(downloaderId: TDownloaderKey) {
+  void router.push({ name: "DownloadServiceManager", params: { downloaderId } });
 }
 
 const toDeleteIds = ref<TDownloaderKey[]>([]);
@@ -260,10 +266,18 @@ async function confirmDeleteDownloader(downloaderId: TDownloaderKey) {
       <template #item.action="{ item }">
         <v-btn-group class="table-action" density="compact" variant="plain">
           <v-btn
-            :disabled="true"
-            :title="t('SetDownloader.index.table.action.status')"
-            icon="mdi-information-outline"
+            :disabled="!item.enabled || item.type !== 'Transmission'"
+            :title="
+              item.type !== 'Transmission'
+                ? t('DownloadServiceManager.unsupported')
+                : !item.enabled
+                  ? t('DownloadServiceManager.disabled')
+                  : t('DownloadServiceManager.open')
+            "
+            color="primary"
+            icon="mdi-view-dashboard-outline"
             size="small"
+            @click="manageDownloadService(item.id)"
           />
 
           <v-btn

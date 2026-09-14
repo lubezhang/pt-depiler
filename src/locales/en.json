@@ -179,6 +179,113 @@
       "upSpeed": "Upload Speed"
     }
   },
+  "DownloadServiceManager": {
+    "title": "Download Service / {name}",
+    "open": "Manage download service",
+    "unsupported": "This downloader is not supported",
+    "disabled": "This download service is disabled. Enable it in settings first.",
+    "missing": "The download service configuration no longer exists.",
+    "backToSettings": "Back to downloader settings",
+    "refresh": "Refresh",
+    "start": "Start",
+    "stop": "Pause",
+    "remove": "Remove",
+    "removeWithData": "Remove torrent and data",
+    "search": "Search name, InfoHash, label, or save path",
+    "columns": "Columns",
+    "settings": {
+      "title": "Download service settings",
+      "defaultDownloadDirectory": "Default download directory (remote host)",
+      "defaultDownloadDirectoryHint": "New torrents will be saved here by default.",
+      "directoryRequired": "Enter a default download directory.",
+      "loadDirectoryFailed": "Unable to load the server default download directory.",
+      "saveDirectoryFailed": "Unable to update the server default download directory."
+    },
+    "filters": {
+      "title": "Torrent filters",
+      "all": "All torrents",
+      "downloading": "Downloading",
+      "completed": "Completed",
+      "active": "Active",
+      "inactive": "Inactive",
+      "stopped": "Stopped",
+      "error": "Error",
+      "waiting": "Waiting",
+      "folders": "Save paths"
+    },
+    "detail": {
+      "none": "No torrent selected",
+      "overview": "Overview",
+      "files": "Files",
+      "trackers": "Trackers",
+      "state": "State",
+      "progress": "Progress",
+      "size": "Size",
+      "ratio": "Ratio",
+      "downloadSpeed": "Download speed",
+      "uploadSpeed": "Upload speed",
+      "savePath": "Save path",
+      "addedAt": "Added at",
+      "noTrackers": "No trackers",
+      "noFiles": "No files",
+      "fileName": "Name",
+      "fileSize": "Size",
+      "fileProgress": "Completed",
+      "fileWanted": "Wanted",
+      "fileWantedYes": "Download this file",
+      "fileWantedNo": "Skip this file",
+      "filePriority": {
+        "title": "Priority",
+        "high": "High",
+        "normal": "Normal",
+        "low": "Low"
+      }
+    },
+    "overview": {
+      "downloadSpeed": "Download speed",
+      "uploadSpeed": "Upload speed",
+      "sessionDownloaded": "Session download",
+      "sessionUploaded": "Session upload"
+    },
+    "table": {
+      "name": "Name",
+      "label": "Label",
+      "size": "Size",
+      "progress": "Progress",
+      "state": "State",
+      "uploadSpeed": "Upload speed",
+      "downloadSpeed": "Download speed",
+      "uploaded": "Uploaded",
+      "downloaded": "Downloaded",
+      "ratio": "Ratio",
+      "path": "Save path",
+      "addedAt": "Added at"
+    },
+    "autoRefresh": {
+      "title": "Auto-refresh",
+      "enable": "Enable auto-refresh",
+      "interval": "Refresh interval (seconds)",
+      "suspended": "Auto-refresh was suspended after 3 consecutive failures. Refresh manually to resume."
+    },
+    "location": {
+      "action": "Set data location",
+      "title": "Set torrent data location",
+      "path": "New torrent data location",
+      "moveData": "Move existing torrent data to the new location",
+      "required": "Enter a new torrent data location.",
+      "success": "Torrent data location updated.",
+      "failed": "Unable to update the torrent data location."
+    },
+    "operation": {
+      "success": "Completed {count} operation(s)",
+      "partial": "Completed {success} operation(s); {failed} failed"
+    },
+    "delete": {
+      "title": "Remove torrents",
+      "text": "Remove {count} selected torrent(s)?",
+      "data": "Also remove local data from the server"
+    }
+  },
   "MyData": {
     "HistoryDataView": {
       "action": {

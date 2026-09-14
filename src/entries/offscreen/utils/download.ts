@@ -30,6 +30,7 @@ import {
   type DownloadHistoryEvent,
 } from "~/application/download-history/service.ts";
 import type { Repository } from "~/domain/ports/index.ts";
+import { DownloadService } from "~/application/download-service/service.ts";
 
 import { logger } from "./logger.ts";
 import { getSiteInstance } from "./site.ts";
@@ -88,6 +89,43 @@ export async function getDownloaderInstance(downloaderId: string): Promise<Downl
   downloaderInstanceCache.set(downloaderId, { configKey, instance });
   return instance;
 }
+
+const downloadService = new DownloadService({
+  getConfig: async (downloaderId) => {
+    const config = await getDownloaderConfig(downloaderId);
+    return config.id ? { id: config.id, type: config.type, enabled: config.enabled } : undefined;
+  },
+  getClient: async (downloaderId) => {
+    const client = await getDownloaderInstance(downloaderId);
+    if (!client) return null;
+    const transmissionClient = client as typeof client & {
+      getDefaultDownloadDirectory(): Promise<string>;
+      setDefaultDownloadDirectory(path: string): Promise<boolean>;
+      setTorrentLocation(id: string | number, location: string, move: boolean): Promise<boolean>;
+    };
+    return {
+      getClientStatus: () => client.getClientStatus(),
+      getClientVersion: () => client.getClientVersion(),
+      getAllTorrents: () => client.getAllTorrents(),
+      getTorrentFiles: (id) => client.getTorrentFiles(id),
+      pauseTorrent: (id) => client.pauseTorrent(id),
+      resumeTorrent: (id) => client.resumeTorrent(id),
+      removeTorrent: (id, removeData) => client.removeTorrent(id, removeData),
+      // Transmission accepts an ID array in one RPC request. Other adapters can omit these capabilities.
+      ...(client.config.type === "Transmission"
+        ? {
+            getDefaultDownloadDirectory: () => transmissionClient.getDefaultDownloadDirectory(),
+            setDefaultDownloadDirectory: (path: string) => transmissionClient.setDefaultDownloadDirectory(path),
+            setTorrentLocation: (id: string | number, location: string, move: boolean) =>
+              transmissionClient.setTorrentLocation(id, location, move),
+            pauseTorrents: (ids: Array<string | number>) => client.pauseTorrent(ids),
+            resumeTorrents: (ids: Array<string | number>) => client.resumeTorrent(ids),
+            removeTorrents: (ids: Array<string | number>, removeData: boolean) => client.removeTorrent(ids, removeData),
+          }
+        : {}),
+    };
+  },
+});
 
 onMessage("getDownloaderVersion", async ({ data: downloaderId }) => {
   let downloaderVersion = "unknown";
@@ -179,6 +217,44 @@ onMessage("resumeClientTorrent", async ({ data: { downloaderId, id } }) => {
 
   return resumeStatus;
 });
+
+onMessage(
+  "getDownloadServiceOverview",
+  async ({ data: downloaderId }) => await downloadService.getOverview(downloaderId),
+);
+onMessage(
+  "listDownloadServiceTorrents",
+  async ({ data: downloaderId }) => await downloadService.listTorrents(downloaderId),
+);
+onMessage(
+  "getDownloadServiceTorrentFiles",
+  async ({ data }) => await downloadService.getTorrentFiles(data.downloaderId, data.torrentId),
+);
+onMessage(
+  "getDownloadServiceDefaultDownloadDirectory",
+  async ({ data: downloaderId }) => await downloadService.getDefaultDownloadDirectory(downloaderId),
+);
+onMessage(
+  "setDownloadServiceDefaultDownloadDirectory",
+  async ({ data }) => await downloadService.setDefaultDownloadDirectory(data.downloaderId, data.path),
+);
+onMessage(
+  "setDownloadServiceTorrentLocation",
+  async ({ data }) => await downloadService.setTorrentLocation(data.downloaderId, data.torrentId, data.location, data.move),
+);
+onMessage(
+  "startDownloadServiceTorrents",
+  async ({ data }) => await downloadService.startTorrents(data.downloaderId, data.torrentIds),
+);
+onMessage(
+  "stopDownloadServiceTorrents",
+  async ({ data }) => await downloadService.stopTorrents(data.downloaderId, data.torrentIds),
+);
+onMessage(
+  "removeDownloadServiceTorrents",
+  async ({ data }) =>
+    await downloadService.removeTorrents(data.downloaderId, data.torrentIds, { deleteData: data.deleteData ?? false }),
+);
 
 function buildDownloadHistory(downloadOption: IDownloadTorrentOption): ITorrentDownloadMetadata {
   const { torrent = {}, downloaderId = "local" } = downloadOption;

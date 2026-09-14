@@ -18,6 +18,13 @@ import type {
 } from "@ptd/social";
 import type { IBackupData, IBackupFileInfo } from "@ptd/backupServer";
 import type { CTorrent, TorrentClientStatus } from "@ptd/downloader";
+import type {
+  BulkResult,
+  ServiceOverview,
+  TorrentFileSummary,
+  TorrentId,
+  TorrentSummary,
+} from "~/application/download-service/service.ts";
 
 // 可序列化的种子信息，用于辅种检测
 export interface ITorrentInfoForVerification {
@@ -90,6 +97,25 @@ export interface ProtocolMap {
   pauseClientTorrent(data: { downloaderId: string; id: any }): boolean;
   resumeClientTorrent(data: { downloaderId: string; id: any }): boolean;
 
+  getDownloadServiceOverview(downloaderId: string): ServiceOverview;
+  listDownloadServiceTorrents(downloaderId: string): TorrentSummary[];
+  getDownloadServiceTorrentFiles(data: { downloaderId: string; torrentId: TorrentId }): TorrentFileSummary[];
+  getDownloadServiceDefaultDownloadDirectory(downloaderId: string): string;
+  setDownloadServiceDefaultDownloadDirectory(data: { downloaderId: string; path: string }): boolean;
+  setDownloadServiceTorrentLocation(data: {
+    downloaderId: string;
+    torrentId: TorrentId;
+    location: string;
+    move: boolean;
+  }): boolean;
+  startDownloadServiceTorrents(data: { downloaderId: string; torrentIds: TorrentId[] }): BulkResult;
+  stopDownloadServiceTorrents(data: { downloaderId: string; torrentIds: TorrentId[] }): BulkResult;
+  removeDownloadServiceTorrents(data: {
+    downloaderId: string;
+    torrentIds: TorrentId[];
+    deleteData?: boolean;
+  }): BulkResult;
+
   downloadTorrent(data: IDownloadTorrentOption): IDownloadTorrentResult;
 
   getDownloadHistory(): ITorrentDownloadMetadata[];
@@ -154,6 +180,15 @@ export const protocolNames = [
   "deleteClientTorrent",
   "pauseClientTorrent",
   "resumeClientTorrent",
+  "getDownloadServiceOverview",
+  "listDownloadServiceTorrents",
+  "getDownloadServiceTorrentFiles",
+  "getDownloadServiceDefaultDownloadDirectory",
+  "setDownloadServiceDefaultDownloadDirectory",
+  "setDownloadServiceTorrentLocation",
+  "startDownloadServiceTorrents",
+  "stopDownloadServiceTorrents",
+  "removeDownloadServiceTorrents",
   "downloadTorrent",
   "getDownloadHistory",
   "getDownloadHistoryById",

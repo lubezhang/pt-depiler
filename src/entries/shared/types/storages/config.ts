@@ -30,6 +30,12 @@ export interface IConfigPiniaStorageSchema {
   // 用于存储 v-data-table 表格的展示
   tableBehavior: Record<UiTableBehaviorKey, UiTableBehaviorItem>;
 
+  // 下载服务管理页面偏好
+  downloadServiceManager: {
+    autoRefreshEnabled: boolean;
+    refreshInterval: number;
+  };
+
   // 用 timeline 和 statistic 等展示的用户名，如果为 "" 则由使用最多的站点决定（使用 configStore.getUserNames.perfName 获取）
   userName: string;
 

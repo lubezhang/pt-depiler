@@ -9,6 +9,7 @@ import {
   CTorrentState,
   TorrentClientStatus,
   CAddTorrentResult,
+  CTorrentFile,
 } from "../types";
 import urlJoin from "url-join";
 import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
@@ -57,6 +58,8 @@ interface rawTorrent {
   labels: string[];
   rateDownload: number;
   rateUpload: number;
+  error: number;
+  errorString: string;
   /**
    * Byte count of all data you've ever uploaded for this torrent.
    */
@@ -72,6 +75,20 @@ interface rawTorrent {
     scrape: string;
     sitename: string;
     tier: number;
+  }>;
+  trackerStats?: Array<{
+    announce: string;
+    isBackup: boolean;
+  }>;
+  files?: Array<{
+    bytesCompleted: number;
+    length: number;
+    name: string;
+  }>;
+  fileStats?: Array<{
+    bytesCompleted?: number;
+    priority: number;
+    wanted: boolean;
   }>;
 }
 
@@ -121,6 +138,7 @@ type TransmissionTorrentIds = number | Array<number | string> | "recently-active
 
 type TransmissionRequestMethod =
   | "session-get"
+  | "session-set"
   | "session-stats"
   | "free-space"
   | "torrent-get"
@@ -128,7 +146,8 @@ type TransmissionRequestMethod =
   | "torrent-start"
   | "torrent-stop"
   | "torrent-remove"
-  | "torrent-set";
+  | "torrent-set"
+  | "torrent-set-location";
 
 interface TransmissionAddTorrentOptions {
   "download-dir": string;
@@ -194,8 +213,8 @@ type TransmissionTorrentsField =
   | "pieceSize"
   | "priorities"
   | "queuePosition"
-  | "rateDownload (B/s)"
-  | "rateUpload (B/s)"
+  | "rateDownload"
+  | "rateUpload"
   | "recheckProgress"
   | "secondsDownloading"
   | "secondsSeeding"
@@ -226,6 +245,11 @@ interface TransmissionTorrentRemoveArguments extends TransmissionTorrentArgument
   "delete-local-data"?: boolean;
 }
 
+interface TransmissionTorrentSetLocationArguments extends TransmissionTorrentArguments {
+  location: string;
+  move: boolean;
+}
+
 // noinspection JSUnusedGlobalSymbols
 export default class Transmission extends AbstractBittorrentClient<TorrentClientConfig> {
   readonly version = "v0.1.0";
@@ -243,7 +267,13 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
     "totalSize",
     "leftUntilDone",
     "labels",
-    "trackers",
+    "rateDownload",
+    "rateUpload",
+    "uploadedEver",
+    "downloadedEver",
+    "error",
+    "errorString",
+    "trackerStats",
   ];
 
   // 实例真实使用的rpc地址
@@ -290,6 +320,7 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
     retStatus.upSpeed = statsData.uploadSpeed;
     retStatus.dlData = statsData["current-stats"].downloadedBytes;
     retStatus.upData = statsData["current-stats"].uploadedBytes;
+    retStatus.torrentCount = statsData.torrentCount;
 
     return retStatus;
   }
@@ -321,6 +352,18 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
       );
       return data.arguments["size-bytes"];
     }
+  }
+
+  async getDefaultDownloadDirectory(): Promise<string> {
+    const {
+      data: { arguments: sessionData },
+    } = await this.request<TransmissionBaseResponse<{ "download-dir": string }>>("session-get");
+    return sessionData["download-dir"];
+  }
+
+  async setDefaultDownloadDirectory(path: string): Promise<boolean> {
+    const { data } = await this.request<TransmissionBaseResponse>("session-set", { "download-dir": path });
+    return data.result === "success";
   }
 
   async addTorrent(url: string, options: Partial<CAddTorrentOptions> = {}): Promise<CAddTorrentResult> {
@@ -410,7 +453,9 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
 
     let returnTorrents: CTorrent[] = data.arguments.torrents.map((torrent) => {
       let state = CTorrentState.unknown;
-      if (torrent.status === 6) {
+      if (torrent.error > 0 || torrent.errorString) {
+        state = CTorrentState.error;
+      } else if (torrent.status === 6) {
         state = CTorrentState.seeding;
       } else if (torrent.status === 4) {
         state = CTorrentState.downloading;
@@ -432,6 +477,7 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
         dateAdded: torrent.addedDate,
         savePath: torrent.downloadDir,
         label: torrent.labels && torrent.labels.length ? torrent.labels[0] : undefined,
+        trackers: this.getActiveTrackerUrls(torrent),
         state: state,
         totalSize: torrent.totalSize,
         uploadSpeed: torrent.rateUpload,
@@ -450,12 +496,12 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
     return returnTorrents;
   }
 
-  async pauseTorrent(id: any): Promise<any> {
+  async pauseTorrent(id: any): Promise<boolean> {
     const args: TransmissionTorrentArguments = {
       ids: id,
     };
-    await this.request("torrent-stop", args);
-    return true;
+    const { data } = await this.request<TransmissionBaseResponse>("torrent-stop", args);
+    return data.result === "success";
   }
 
   async removeTorrent(id: number, removeData: boolean | undefined): Promise<boolean> {
@@ -463,61 +509,100 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
       ids: id,
       "delete-local-data": removeData,
     };
-    await this.request("torrent-remove", args);
-    return true;
+    const { data } = await this.request<TransmissionBaseResponse>("torrent-remove", args);
+    return data.result === "success";
   }
 
   async resumeTorrent(id: any): Promise<boolean> {
     const args: TransmissionTorrentArguments = {
       ids: id,
     };
-    await this.request("torrent-start", args);
-    return true;
+    const { data } = await this.request<TransmissionBaseResponse>("torrent-start", args);
+    return data.result === "success";
+  }
+
+  async setTorrentLocation(id: TransmissionTorrentIds, location: string, move: boolean): Promise<boolean> {
+    const args: TransmissionTorrentSetLocationArguments = { ids: id, location, move };
+    const { data } = await this.request<TransmissionBaseResponse>("torrent-set-location", args);
+    return data.result === "success";
   }
 
   async getTorrentTrackers(torrent: CTorrent): Promise<string[]> {
-    let trackers: rawTorrent["trackers"];
-    if (Array.isArray(torrent.raw.trackers)) {
-      trackers = torrent.raw.trackers;
+    let rawTorrentData: rawTorrent | undefined;
+    if (Array.isArray(torrent.raw.trackerStats)) {
+      rawTorrentData = torrent.raw;
     } else {
       const {
         data: { arguments: args },
       } = await this.request<TransmissionTorrentGetResponse>("torrent-get", {
         ids: [torrent.id],
-        fields: ["trackers"],
+        fields: ["trackerStats"],
       });
-      trackers = args.torrents[0]?.trackers;
+      rawTorrentData = args.torrents[0];
     }
 
-    return (trackers ?? []).map((t) => t.announce);
+    return rawTorrentData ? this.getActiveTrackerUrls(rawTorrentData) : [];
+  }
+
+  override async getTorrentFiles(id: CTorrent["id"]): Promise<CTorrentFile[]> {
+    const {
+      data: { arguments: args },
+    } = await this.request<TransmissionTorrentGetResponse>("torrent-get", {
+      ids: [id],
+      fields: ["files", "fileStats"],
+    });
+    const torrent = args.torrents[0];
+
+    return (torrent?.files ?? []).map((file, index) => {
+      const stats = torrent?.fileStats?.[index];
+      return {
+        name: file.name,
+        length: file.length,
+        bytesCompleted: stats?.bytesCompleted ?? file.bytesCompleted ?? 0,
+        wanted: stats?.wanted ?? true,
+        priority: stats?.priority ?? 0,
+      };
+    });
   }
 
   async request<T>(method: TransmissionRequestMethod, args: any = {}): Promise<AxiosResponse<T>> {
     try {
-      return await axios.post<T>(
-        this.address,
-        {
-          method: method,
-          arguments: args,
-        },
-        {
-          auth: {
-            username: this.config.username,
-            password: this.config.password,
-          },
-          headers: {
-            "X-Transmission-Session-Id": this.sessionId,
-          },
-          timeout: this.config.timeout,
-        },
-      );
+      return await this.post<T>(method, args);
     } catch (error: any) {
       if (isAxiosError(error) && error?.response?.status === 409) {
-        this.sessionId = error.response.headers["x-transmission-session-id"]; // lower cased header in axios
-        return await this.request<T>(method, args);
-      } else {
-        throw error;
+        const sessionId = error.response.headers["x-transmission-session-id"];
+        if (!sessionId) throw error;
+        this.sessionId = sessionId; // lower cased header in axios
+        return await this.post<T>(method, args);
       }
+      throw error;
     }
+  }
+
+  private async post<T>(method: TransmissionRequestMethod, args: any): Promise<AxiosResponse<T>> {
+    return await axios.post<T>(
+      this.address,
+      {
+        method,
+        arguments: args,
+      },
+      {
+        auth: {
+          username: this.config.username,
+          password: this.config.password,
+        },
+        headers: {
+          "X-Transmission-Session-Id": this.sessionId,
+        },
+        timeout: this.config.timeout,
+      },
+    );
+  }
+
+  private getActiveTrackerUrls(torrent: rawTorrent): string[] {
+    return (torrent.trackerStats ?? [])
+      .filter((tracker) => !tracker.isBackup)
+      .map((tracker) => tracker.announce)
+      .filter(Boolean);
   }
 }

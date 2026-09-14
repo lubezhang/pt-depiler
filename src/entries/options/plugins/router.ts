@@ -151,6 +151,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { isMainMenu: false },
     component: () => import("../views/Overview/MyData/UserDataStatistic/Index.vue"),
   },
+  {
+    path: "/download-service/:downloaderId",
+    name: "DownloadServiceManager",
+    meta: { isMainMenu: false },
+    component: () => import("../views/DownloadServiceManager/Index.vue"),
+  },
 
   { path: "/:pathMatch(.*)*", name: "NotFound", redirect: "/" },
 ];

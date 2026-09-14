@@ -10,7 +10,7 @@ interface downloaderEntity {
   clientMetaData: TorrentClientMetaData;
 }
 
-export const requireContext = import.meta.glob<downloaderEntity>("./entity/*.ts");
+export const requireContext = import.meta.glob<downloaderEntity>(["./entity/*.ts", "!./entity/*.test.ts"]);
 export const entityList = Object.keys(requireContext).map((value: string) => {
   return value.replace(/^\.\/entity\//, "").replace(/\.ts$/, "");
 }) as string[];

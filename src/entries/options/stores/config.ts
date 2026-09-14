@@ -17,6 +17,23 @@ const deprecatedConfigKeys = [
 ];
 
 export const defaultTimelineBackgroundColor = "#455A64";
+export const defaultDownloadServiceManagerColumns = [
+  "label",
+  "totalSize",
+  "progress",
+  "state",
+  "uploadSpeed",
+  "downloadSpeed",
+  "totalUploaded",
+  "totalDownloaded",
+  "ratio",
+  "savePath",
+  "addedAt",
+];
+export const defaultDownloadServiceManagerSettings = {
+  autoRefreshEnabled: false,
+  refreshInterval: 15,
+};
 
 export const useConfigStore = defineStore("config", {
   persistWebExt: {
@@ -50,6 +67,19 @@ export const useConfigStore = defineStore("config", {
           }
           needsSave = true;
         }
+      }
+
+      // 旧配置中没有下载服务管理页，补齐默认列配置以支持后续持久化。
+      if (!state.tableBehavior.DownloadServiceManager) {
+        state.tableBehavior.DownloadServiceManager = {
+          columns: [...defaultDownloadServiceManagerColumns],
+        };
+        needsSave = true;
+      }
+
+      if (!state.downloadServiceManager) {
+        state.downloadServiceManager = { ...defaultDownloadServiceManagerSettings };
+        needsSave = true;
       }
 
       if (needsSave) {
@@ -134,6 +164,9 @@ export const useConfigStore = defineStore("config", {
         ],
         sortBy: [{ key: "dateAdded", order: "desc" }],
       },
+      DownloadServiceManager: {
+        columns: [...defaultDownloadServiceManagerColumns],
+      },
       SetSearchSolution: {
         itemsPerPage: 10,
       },
@@ -142,6 +175,8 @@ export const useConfigStore = defineStore("config", {
         sortBy: [{ key: "userConfig.sortIndex", order: "desc" }],
       },
     },
+
+    downloadServiceManager: { ...defaultDownloadServiceManagerSettings },
 
     userName: "",
 
@@ -345,6 +380,12 @@ export const useConfigStore = defineStore("config", {
     },
   },
   actions: {
+    updateDownloadServiceManagerSettings(settings: IConfigPiniaStorageSchema["downloadServiceManager"]) {
+      this.downloadServiceManager = { ...settings };
+      void this.$save().catch((error) => {
+        console.error("[pinia] Failed to persist download service manager settings", error);
+      });
+    },
     updateTableBehavior(table: string, key: string, data: any) {
       // @ts-ignore
       this.tableBehavior[table][key] = data;
