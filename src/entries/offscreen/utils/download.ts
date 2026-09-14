@@ -24,6 +24,12 @@ import type {
   IDownloadFileOptions,
   AugmentedRequired,
 } from "@/shared/types.ts";
+import {
+  DownloadHistoryCommands,
+  DownloadHistoryQueries,
+  type DownloadHistoryEvent,
+} from "~/application/download-history/service.ts";
+import type { Repository } from "~/domain/ports/index.ts";
 
 import { logger } from "./logger.ts";
 import { getSiteInstance } from "./site.ts";
@@ -426,28 +432,23 @@ function getErrorMessage(error: unknown): string {
 }
 
 export async function getDownloadHistory() {
-  return await (await ptdIndexDb).getAll("download_history");
+  return [...(await downloadHistoryQueries.list())];
 }
 
 onMessage("getDownloadHistory", getDownloadHistory);
 
 export async function getDownloadHistoryById(downloadId: TTorrentDownloadKey) {
-  return await (await ptdIndexDb).get("download_history", downloadId);
+  return await downloadHistoryQueries.getById(downloadId);
 }
 
 onMessage("getDownloadHistoryById", async ({ data: downloadId }) => (await getDownloadHistoryById(downloadId))!);
 
 export async function setDownloadHistory(data: ITorrentDownloadMetadata) {
-  const allowedSave = await isAllowedSaveDownloadHistory();
-  return allowedSave ? await (await ptdIndexDb).put("download_history", data) : 0;
+  return (await downloadHistoryCommands.create(data)) ?? 0;
 }
 
 export async function patchDownloadHistory(downloadId: TTorrentDownloadKey, data: Partial<ITorrentDownloadMetadata>) {
-  const allowedSave = await isAllowedSaveDownloadHistory();
-  const downloadHistory = await getDownloadHistoryById(downloadId);
-  if (allowedSave && downloadHistory) {
-    await setDownloadHistory({ ...downloadHistory, ...data });
-  }
+  return await downloadHistoryCommands.patch(downloadId, data);
 }
 
 async function setDownloadStatus(
@@ -455,7 +456,8 @@ async function setDownloadStatus(
   downloadStatus: TTorrentDownloadStatus,
 ): Promise<TTorrentDownloadStatus> {
   try {
-    await patchDownloadHistory(downloadId, { downloadStatus });
+    const result = await downloadHistoryCommands.setStatus(downloadId, downloadStatus);
+    if (result.stored && !result.history) throw new Error(`Download history not found: ${downloadId}`);
   } catch (error) {
     reportDownloadFailure(`Failed to persist torrent download status "${downloadStatus}"`, error);
     throw new DownloadStatusPersistenceError(downloadStatus, error);
@@ -468,13 +470,66 @@ onMessage("setDownloadHistoryStatus", async ({ data: { downloadId, status } }) =
 });
 
 export async function deleteDownloadHistoryById(downloadId: TTorrentDownloadKey) {
-  return await (await ptdIndexDb).delete("download_history", downloadId);
+  return await downloadHistoryCommands.delete(downloadId);
 }
 
-onMessage("deleteDownloadHistoryById", async ({ data: downloadId }) => await deleteDownloadHistoryById(downloadId));
+onMessage("deleteDownloadHistoryById", async ({ data: downloadId }) => {
+  await deleteDownloadHistoryById(downloadId);
+});
 
 export async function clearDownloadHistory() {
-  return await (await ptdIndexDb).clear("download_history");
+  return await downloadHistoryCommands.clear();
 }
 
-onMessage("clearDownloadHistory", clearDownloadHistory);
+onMessage("clearDownloadHistory", async () => {
+  await clearDownloadHistory();
+});
+
+type TDownloadHistoryEvent = DownloadHistoryEvent<ITorrentDownloadMetadata, TTorrentDownloadKey>;
+
+const downloadHistoryListeners = new Set<(event: TDownloadHistoryEvent) => void>();
+
+export function subscribeDownloadHistoryEvents(listener: (event: TDownloadHistoryEvent) => void): () => void {
+  downloadHistoryListeners.add(listener);
+  return () => downloadHistoryListeners.delete(listener);
+}
+
+const downloadHistoryRepository: Repository<TTorrentDownloadKey, ITorrentDownloadMetadata> = {
+  async clear() {
+    const database = await ptdIndexDb;
+    const count = (await database.getAll("download_history")).length;
+    await database.clear("download_history");
+    return count;
+  },
+  async delete(downloadId) {
+    const database = await ptdIndexDb;
+    if (!(await database.get("download_history", downloadId))) return false;
+    await database.delete("download_history", downloadId);
+    return true;
+  },
+  async findAll() {
+    return await (await ptdIndexDb).getAll("download_history");
+  },
+  async findById(downloadId) {
+    return await (await ptdIndexDb).get("download_history", downloadId);
+  },
+  async insert(history) {
+    return await (await ptdIndexDb).put("download_history", history);
+  },
+  async save(history) {
+    await (await ptdIndexDb).put("download_history", history);
+  },
+};
+
+const downloadHistoryPolicy = { isEnabled: isAllowedSaveDownloadHistory };
+const downloadHistoryEvents = {
+  publish(event: TDownloadHistoryEvent) {
+    downloadHistoryListeners.forEach((listener) => listener(event));
+  },
+};
+const downloadHistoryQueries = new DownloadHistoryQueries(downloadHistoryRepository);
+const downloadHistoryCommands = new DownloadHistoryCommands(
+  downloadHistoryRepository,
+  downloadHistoryPolicy,
+  downloadHistoryEvents,
+);

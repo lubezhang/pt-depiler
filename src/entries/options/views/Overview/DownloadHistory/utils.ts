@@ -1,6 +1,7 @@
 import { throttle } from "es-toolkit";
 import { computed, reactive, shallowRef } from "vue";
 import { sendMessage } from "@/messages.ts";
+import { subscribeDownloadHistoryEvents } from "@/offscreen/utils/download.ts";
 import { useTableCustomFilter } from "@/options/directives/useAdvanceFilter.ts";
 
 import type { ITorrentDownloadMetadata, TTorrentDownloadKey } from "@/shared/types.ts";
@@ -8,6 +9,32 @@ import type { ITorrentDownloadMetadata, TTorrentDownloadKey } from "@/shared/typ
 // 使用 shallowRef 优化大量下载历史数据的性能
 export const downloadHistory = shallowRef<Record<TTorrentDownloadKey, ITorrentDownloadMetadata>>({});
 export const downloadHistoryList = computed(() => Object.values(downloadHistory.value));
+
+// 轮询保留给尚未迁移的远端下载状态；本地写操作通过应用事件立即同步。
+subscribeDownloadHistoryEvents((event) => {
+  if (event.type === "DownloadHistoryCleared") {
+    downloadHistory.value = {};
+    return;
+  }
+  if (event.type === "DownloadHistoryDeleted") {
+    const next = { ...downloadHistory.value };
+    delete next[event.downloadId];
+    downloadHistory.value = next;
+    const timer = watchingMap[event.downloadId];
+    if (timer) clearTimeout(timer);
+    delete watchingMap[event.downloadId];
+    return;
+  }
+
+  const history = event.history;
+  if (history.id === undefined) return;
+  downloadHistory.value = { ...downloadHistory.value, [history.id]: history };
+  if (history.downloadStatus !== "downloading" && history.downloadStatus !== "pending") {
+    const timer = watchingMap[history.id];
+    if (timer) clearTimeout(timer);
+    delete watchingMap[history.id];
+  }
+});
 
 export const tableCustomFilter = useTableCustomFilter({
   parseOptions: {

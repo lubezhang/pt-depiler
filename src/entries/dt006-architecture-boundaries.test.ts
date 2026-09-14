@@ -30,12 +30,20 @@ describe("DT-006 架构边界门禁", () => {
   it("拒绝领域层反向依赖与浏览器扩展入口", () => {
     const root = createFixture({
       "manifest.json": "{}",
-      "src/packages/domain/use-case.ts": 'import { ref } from "vue";\nvoid ref;\n',
+      "src/domain/use-case.ts": 'import { ref } from "vue";\nvoid ref;\n',
     });
 
     expect(findArchitectureViolations(root).map((violation) => violation.rule)).toEqual(
       expect.arrayContaining(["browser-extension-entrypoint", "domain-dependency"]),
     );
+  });
+
+  it("拒绝应用层直接导入 entries", () => {
+    const root = createFixture({
+      "src/application/search/query.ts": 'import { sendMessage } from "@/messages.ts";\nvoid sendMessage;\n',
+    });
+
+    expect(findArchitectureViolations(root).map((violation) => violation.rule)).toContain("application-dependency");
   });
 
   it("拒绝新增空 catch、副作用导入和全局 patch", () => {

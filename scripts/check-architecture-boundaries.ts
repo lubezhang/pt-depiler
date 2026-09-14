@@ -88,7 +88,7 @@ export function findArchitectureViolations(root = process.cwd()): ArchitectureVi
     const source = readFileSync(file, "utf8");
     const imports = importSpecifiers(source);
 
-    if (projectPath.startsWith("src/packages/domain/")) {
+    if (projectPath.startsWith("src/domain/") || projectPath.startsWith("src/packages/domain/")) {
       for (const imported of imports) {
         const forbidden =
           imported.specifier === "vue" ||
@@ -101,6 +101,24 @@ export function findArchitectureViolations(root = process.cwd()): ArchitectureVi
             line: lineAt(source, imported.index),
             message: `领域层不能导入 ${imported.specifier}`,
             rule: "domain-dependency",
+          });
+        }
+      }
+    }
+
+    if (projectPath.startsWith("src/application/")) {
+      for (const imported of imports) {
+        const forbidden =
+          imported.specifier === "vue" ||
+          imported.specifier === "pinia" ||
+          imported.specifier.startsWith("@tauri-apps/") ||
+          isEntryImport(root, file, imported.specifier);
+        if (forbidden) {
+          violations.push({
+            file: projectPath,
+            line: lineAt(source, imported.index),
+            message: `应用层不能导入 UI 或平台入口 ${imported.specifier}`,
+            rule: "application-dependency",
           });
         }
       }
