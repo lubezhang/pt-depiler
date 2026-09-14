@@ -2,7 +2,8 @@
  * S3 兼容对象存储备份支持（AWS S3、MinIO、Cloudflare R2、DigitalOcean Spaces 等）
  */
 
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
+import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
+import type { AxiosRequestConfig, AxiosResponse } from "axios";
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import { localSort } from "../utils";
 import type { IBackupConfig, IBackupData, IBackupFileInfo, IBackupFileListOption, IBackupMetadata } from "../type";

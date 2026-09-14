@@ -8,7 +8,7 @@
  * - 记录 applicationKeyId 和 applicationKey
  */
 
-import axios from "axios";
+import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
 
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import { localSort } from "../utils";

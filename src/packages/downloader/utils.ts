@@ -1,5 +1,6 @@
 import { Buffer } from "buffer";
-import axios, { AxiosRequestConfig } from "axios";
+import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
+import type { AxiosRequestConfig } from "axios";
 import parseTorrent, { Instance as TorrentInstance } from "parse-torrent";
 import isValidFilename from "valid-filename";
 import { decode } from "urlencode";

@@ -16,7 +16,8 @@
  */
 
 import CryptoJS from "crypto-js";
-import axios, { AxiosRequestConfig } from "axios";
+import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
+import type { AxiosRequestConfig } from "axios";
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import type {
   IBackupConfig,

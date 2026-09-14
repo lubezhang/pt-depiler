@@ -28,6 +28,7 @@ cookie_store = "0.22"
 reqwest_cookie_store = "0.9"
 tempfile = "3"
 libc = "0.2"
+keyring = "3"
 
 [features]
 # this feature is used for production builds where `devUrl` is not used

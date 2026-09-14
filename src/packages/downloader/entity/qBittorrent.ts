@@ -15,7 +15,8 @@ import {
   TorrentClientStatus,
   CAddTorrentResult,
 } from "../types";
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
+import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
+import type { AxiosRequestConfig, AxiosResponse } from "axios";
 import urlJoin from "url-join";
 import { getRemoteTorrentFile } from "../utils";
 import { merge } from "es-toolkit";

@@ -18,7 +18,10 @@ use tempfile::NamedTempFile;
 use tokio::process::Command;
 use url::Url;
 
-use crate::state::AppState;
+use crate::{
+    http_policy::{HttpPolicy, HttpResourceRegistration},
+    state::AppState,
+};
 
 const HTTP_DEBUG_LOG_FILE: &str = "pt-depiler-http-debug.log";
 const HTTP_DEBUG_LOG_MAX_BYTES: u64 = 1_048_576;
@@ -83,6 +86,14 @@ fn request_cookie_names(state: &AppState, request_url: &str) -> String {
     names.join(",")
 }
 
+fn ensure_business_window(window: &WebviewWindow) -> Result<(), String> {
+    if window.label() == SITE_LOGIN_WINDOW_LABEL {
+        Err("登录窗口无权调用业务命令".to_string())
+    } else {
+        Ok(())
+    }
+}
+
 /// 前端发起的站点请求统一走此命令。
 /// 替代原扩展的 declarativeNetRequest + extends/axios/replaceUnsafeHeader + offscreen fetch：
 /// - 全局 cookie store（对齐浏览器全局 cookie jar，cookie 按 domain 隔离）
@@ -96,6 +107,10 @@ fn request_cookie_names(state: &AppState, request_url: &str) -> String {
 pub struct FetchRequest {
     pub request_id: Option<String>,
     pub site_id: String,
+    /// The requesting adapter declares its resource identity with the request.
+    /// The platform validates it before opening a network connection.
+    pub resource_endpoint: Option<String>,
+    pub resource_kind: Option<crate::http_policy::ResourceKind>,
     pub url: String,
     pub method: Option<String>,
     pub headers: Option<HashMap<String, String>>,
@@ -108,6 +123,14 @@ pub struct FetchRequest {
     pub max_retries: Option<u32>,
     /// 是否以二进制方式返回 body（base64 编码），用于种子文件等
     pub binary: Option<bool>,
+}
+
+#[tauri::command]
+pub fn register_http_resource(
+    registration: HttpResourceRegistration,
+    policy: State<'_, HttpPolicy>,
+) -> Result<(), String> {
+    policy.register(registration)
 }
 
 #[derive(Deserialize)]
@@ -592,7 +615,20 @@ fn should_use_curl_fallback(response: &RawHttpResponse, method: &Method) -> bool
 pub async fn ptd_fetch(
     req: FetchRequest,
     state: State<'_, AppState>,
+    policy: State<'_, HttpPolicy>,
+    window: WebviewWindow,
 ) -> Result<FetchResponse, String> {
+    ensure_business_window(&window)?;
+    if let (Some(endpoint), Some(kind)) = (req.resource_endpoint.clone(), req.resource_kind) {
+        policy.register(HttpResourceRegistration {
+            resource_id: req.site_id.clone(),
+            endpoint,
+            kind,
+        })?;
+    }
+    let method_name = req.method.as_deref().unwrap_or("GET").to_ascii_uppercase();
+    let method = Method::from_bytes(method_name.as_bytes()).map_err(|error| error.to_string())?;
+    policy.validate(&req.site_id, &method, &req.url)?;
     ptd_fetch_cancellable(req, state.inner()).await
 }
 
@@ -1251,6 +1287,8 @@ mod tests {
         FetchRequest {
             request_id: None,
             site_id: "test".to_string(),
+            resource_endpoint: None,
+            resource_kind: None,
             url,
             method: None,
             headers: None,

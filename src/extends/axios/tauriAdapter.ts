@@ -50,31 +50,49 @@ export function invalidateHostMapCache() {
   hostMapPromise = null;
 }
 
-export const tauriAdapter: AxiosAdapter = async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
-  const responseType = config.responseType;
-  const binary = isBinaryResponseType(responseType);
-  const fullUrl = buildRequestUrl(config);
+export type HttpResourceKind = "site" | "service";
 
-  const hostMap = await loadHostMap();
-  const siteId = resolveSiteId(fullUrl, hostMap);
-  const serialized = await serializeRequestBody(config.data, headersToRecord(config.headers, config.auth));
-  const requestId = crypto.randomUUID();
+export interface HttpResourceIdentity {
+  kind: HttpResourceKind;
+  resourceId: string;
+}
 
-  const request = invoke<FetchResponse>("ptd_fetch", {
-    req: {
-      requestId,
-      siteId,
-      url: fullUrl,
-      method: (config.method ?? "get").toLowerCase(),
-      headers: serialized.headers,
-      body: serialized.body,
-      timeout: config.timeout,
-      binary,
-    },
-  }).catch((error: unknown) => Promise.reject(toAxiosTransportError(error, config)));
-  const resp = await withCancellation(request, config, () =>
-    invoke<void>("ptd_cancel_fetch", { requestId }).catch(() => undefined),
-  );
+export function createTauriAdapter(identity?: HttpResourceIdentity): AxiosAdapter {
+  return async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
+    const responseType = config.responseType;
+    const binary = isBinaryResponseType(responseType);
+    const fullUrl = buildRequestUrl(config);
 
-  return createAxiosResponse(resp, config);
-};
+    const hostMap = await loadHostMap();
+    const inferredSiteId = resolveSiteId(fullUrl, hostMap);
+    const resource = identity ?? {
+      kind: inferredSiteId === "default" ? ("service" as const) : ("site" as const),
+      resourceId: inferredSiteId === "default" ? `legacy:${new URL(fullUrl).host}` : inferredSiteId,
+    };
+    const serialized = await serializeRequestBody(config.data, headersToRecord(config.headers, config.auth));
+    const requestId = crypto.randomUUID();
+
+    const request = invoke<FetchResponse>("ptd_fetch", {
+      req: {
+        requestId,
+        siteId: resource.resourceId,
+        resourceEndpoint: new URL(fullUrl).origin,
+        resourceKind: resource.kind,
+        url: fullUrl,
+        method: (config.method ?? "get").toLowerCase(),
+        headers: serialized.headers,
+        body: serialized.body,
+        timeout: config.timeout,
+        binary,
+      },
+    }).catch((error: unknown) => Promise.reject(toAxiosTransportError(error, config)));
+    const resp = await withCancellation(request, config, () =>
+      invoke<void>("ptd_cancel_fetch", { requestId }).catch(() => undefined),
+    );
+
+    return createAxiosResponse(resp, config);
+  };
+}
+
+// 仅供尚未迁移的站点调用；调用方必须显式传入该 adapter，禁止修改 axios.defaults。
+export const tauriAdapter = createTauriAdapter();

@@ -19,7 +19,8 @@
  */
 import urlJoin from "url-join";
 import { sleep } from "~/helper.ts";
-import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
+import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
+import { AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import { EListOrderBy, EListOrderMode } from "../type";

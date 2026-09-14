@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "site-login",
+  "description": "Untrusted site login window: navigation only, no application commands or plugins.",
+  "windows": ["site-login"],
+  "permissions": ["core:default"]
+}
