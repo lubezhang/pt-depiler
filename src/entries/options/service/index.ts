@@ -18,9 +18,17 @@ import "@/background/utils/cookies.ts";
 // 定时任务：监听 Rust scheduler event + reDownloadTorrent
 import "@/background/utils/alarms.ts";
 
-assertAllProtocolHandlersRegistered();
-
 // 启动时修复存储中的坏数据
 import { startStoredUserInfoRepair } from "./startup.ts";
 
-startStoredUserInfoRepair();
+let initialized = false;
+
+export async function registerLegacyServices(): Promise<void> {
+  if (initialized) return;
+  assertAllProtocolHandlersRegistered();
+  initialized = true;
+}
+
+export function startLegacyRecovery(): void {
+  startStoredUserInfoRepair();
+}

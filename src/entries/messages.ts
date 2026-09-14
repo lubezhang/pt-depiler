@@ -1,4 +1,5 @@
 // Tauri 单进程本地消息路由。
+import { CommandBus, type ContractMap } from "~/application/contracts.ts";
 import type {
   IAdvancedSearchRequestConfig,
   ISearchResult,
@@ -183,28 +184,31 @@ type TProtocolName = (typeof protocolNames)[number];
 type Assert<T extends true> = T;
 type ProtocolMapIsEnumerated = Exclude<keyof ProtocolMap, TProtocolName> extends never ? true : false;
 type _ProtocolMapIsEnumerated = Assert<ProtocolMapIsEnumerated>;
-type TMessageHandler<K extends keyof ProtocolMap> = (
-  message: { data: Parameters<ProtocolMap[K]>[0] },
-) => void | Promise<ReturnType<ProtocolMap[K]>>;
-type TRegisteredMessageHandler = (message: { data: unknown }) => unknown;
+type TMessageHandler<K extends keyof ProtocolMap> = (message: {
+  data: Parameters<ProtocolMap[K]>[0];
+}) => void | Promise<ReturnType<ProtocolMap[K]>>;
+type LegacyCommandMap = {
+  [K in keyof ProtocolMap]: {
+    input: Parameters<ProtocolMap[K]>[0];
+    output: Awaited<ReturnType<ProtocolMap[K]>>;
+  };
+};
 
-// 全局消息处理函数映射
-const messageMaps: Partial<Record<keyof ProtocolMap, TRegisteredMessageHandler>> = {};
+export const commandBus = new CommandBus<LegacyCommandMap & ContractMap>(protocolNames);
 
 /**
  * sendMessage 优先调用本地 messageMaps 中注册的 handler；无 handler 时抛错（表示该消息尚未迁移到前端 service）。
  */
-export function onMessage<K extends keyof ProtocolMap>(
-  type: K,
-  handler: TMessageHandler<K>,
-) {
-  messageMaps[type] = handler as TRegisteredMessageHandler;
+export function onMessage<K extends keyof ProtocolMap>(type: K, handler: TMessageHandler<K>) {
+  commandBus.replace(type, (data) => handler({ data: data as Parameters<ProtocolMap[K]>[0] }));
 }
 
 export function assertAllProtocolHandlersRegistered() {
-  const missingHandlers = protocolNames.filter((type) => !messageMaps[type]);
-  if (missingHandlers.length > 0) {
-    throw new Error(`[messaging] Missing handlers for protocols: ${missingHandlers.join(", ")}`);
+  try {
+    commandBus.assertRegistered();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : (error as { message?: string }).message;
+    throw new Error(`[messaging] ${message}`);
   }
 }
 
@@ -212,9 +216,12 @@ export async function sendMessage<K extends keyof ProtocolMap>(
   type: K,
   data: Parameters<ProtocolMap[K]>[0],
 ): Promise<ReturnType<ProtocolMap[K]>> {
-  const localHandler = messageMaps[type];
-  if (localHandler) {
-    return (await localHandler({ data })) as ReturnType<ProtocolMap[K]>;
+  try {
+    return (await commandBus.execute(type, data)) as ReturnType<ProtocolMap[K]>;
+  } catch (error) {
+    if ((error as { code?: string }).code === "COMMAND_HANDLER_MISSING") {
+      throw new Error(`[messaging] No handler registered for message "${String(type)}"`);
+    }
+    throw error;
   }
-  throw new Error(`[messaging] No handler registered for message "${String(type)}"`);
 }

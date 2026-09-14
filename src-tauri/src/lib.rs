@@ -1,4 +1,5 @@
 mod download;
+pub mod error;
 mod http;
 mod scheduler;
 mod state;
