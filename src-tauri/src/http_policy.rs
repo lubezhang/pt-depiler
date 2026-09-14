@@ -41,10 +41,11 @@ fn is_private_host(url: &Url) -> bool {
             ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_unspecified()
         }
         Some(url::Host::Ipv6(ip)) => {
+            let first_segment = ip.segments()[0];
             ip.is_loopback()
                 || ip.is_unspecified()
-                || ip.is_unique_local()
-                || ip.is_unicast_link_local()
+                || first_segment & 0xfe00 == 0xfc00
+                || first_segment & 0xffc0 == 0xfe80
         }
         Some(url::Host::Domain(host)) => {
             host.eq_ignore_ascii_case("localhost") || host.ends_with(".local")
@@ -174,5 +175,19 @@ mod tests {
         assert!(policy
             .validate("downloader:one", &Method::GET, "http://127.0.0.1:8080/api")
             .is_ok());
+    }
+
+    #[test]
+    fn blocks_private_ipv6_networks_for_sites() {
+        let policy = HttpPolicy::default();
+        for endpoint in ["http://[fc00::1]", "http://[fe80::1]"] {
+            assert!(policy
+                .register(HttpResourceRegistration {
+                    resource_id: "site:one".to_string(),
+                    endpoint: endpoint.to_string(),
+                    kind: ResourceKind::Site,
+                })
+                .is_err());
+        }
     }
 }
