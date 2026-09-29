@@ -90,6 +90,7 @@ pub struct AppState {
     pub client: Client,
     pub cookie_store: Arc<CookieStoreMutex>,
     http_cancellations: Mutex<HttpCancellationRegistry>,
+    site_login_target: Mutex<Option<String>>,
     persistence: Option<CookiePersistence>,
     startup_diagnostic: Option<String>,
 }
@@ -153,6 +154,7 @@ impl AppState {
             client,
             cookie_store,
             http_cancellations: Mutex::new(HttpCancellationRegistry::default()),
+            site_login_target: Mutex::new(None),
             persistence,
             startup_diagnostic,
         }
@@ -171,6 +173,22 @@ impl AppState {
 
     pub fn startup_diagnostic(&self) -> Option<&str> {
         self.startup_diagnostic.as_deref()
+    }
+
+    pub(crate) fn set_site_login_target(&self, site_url: String) -> Result<(), String> {
+        *self
+            .site_login_target
+            .lock()
+            .map_err(|error| error.to_string())? = Some(site_url);
+        Ok(())
+    }
+
+    pub(crate) fn take_site_login_target(&self) -> Result<Option<String>, String> {
+        Ok(self
+            .site_login_target
+            .lock()
+            .map_err(|error| error.to_string())?
+            .take())
     }
 
     pub(crate) fn register_http_request(

@@ -74,14 +74,21 @@ function isTransientHttp400(error: unknown): boolean {
 export async function openInteractiveSiteLogin(
   input: Pick<InteractiveSiteLoginInput, "siteUrl" | "schema" | "loginPath">,
 ): Promise<void> {
-  const loginUrl = resolveUrl(input.loginPath?.trim() || getDefaultLoginPath(input.schema), input.siteUrl);
+  const loginUrl = resolveUrl(input.loginPath?.trim() || input.siteUrl, input.siteUrl);
   await invoke("open_site_login", { siteUrl: input.siteUrl, loginUrl });
 }
 
 export async function finishInteractiveSiteLogin(input: InteractiveSiteLoginInput): Promise<SiteLoginResult> {
   const cookieCount = await invoke<number>("finish_site_login", { siteUrl: input.siteUrl });
+  return verifySyncedSiteLogin(input, cookieCount);
+}
+
+export async function verifySyncedSiteLogin(
+  input: Pick<InteractiveSiteLoginInput, "siteId" | "siteUrl">,
+  cookieCount: number,
+): Promise<SiteLoginResult> {
   if (cookieCount === 0) {
-    throw new Error("没有从站点登录窗口获取到 Cookie。请先在该窗口完成登录。");
+    throw new Error("没有从站点登录窗口获取到 Cookie。请完成登录后再关闭窗口。");
   }
   try {
     await verifyLoggedIn(input.siteId, input.siteUrl);

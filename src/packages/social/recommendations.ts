@@ -1,5 +1,6 @@
-import axios from "axios";
 import PQueue from "p-queue";
+
+import { socialHttpClient } from "~/extends/axios/resourceClient.ts";
 
 import type { ISocialSitePageInformation, TSupportSocialSite } from "./types.ts";
 
@@ -347,7 +348,7 @@ function normalizeDoubanSubjectCollection(
 
 async function fetchRecommendationSource(source: ISocialRecommendationSource): Promise<ISocialRecommendationItem[]> {
   if (source.kind === "doubanSearchSubjects") {
-    const { data } = await axios.get<IDoubanSearchSubjectsResponse>(source.url, {
+    const { data } = await socialHttpClient(source.url).get<IDoubanSearchSubjectsResponse>(source.url, {
       responseType: "json",
       timeout: 10e3,
     });
@@ -356,7 +357,7 @@ async function fetchRecommendationSource(source: ISocialRecommendationSource): P
   }
 
   if (source.kind === "doubanSubjectCollection") {
-    const { data } = await axios.get<IDoubanSubjectCollectionResponse>(source.url, {
+    const { data } = await socialHttpClient(source.url).get<IDoubanSubjectCollectionResponse>(source.url, {
       headers: source.referer ? { Referer: source.referer } : undefined,
       responseType: "json",
       timeout: 10e3,
@@ -380,7 +381,7 @@ async function fetchRecommendationSource(source: ISocialRecommendationSource): P
   }
 
   const [, parser] = parserEntry;
-  const { data } = await axios.get<Document>(source.url, {
+  const { data } = await socialHttpClient(source.url).get<Document>(source.url, {
     responseType: "document",
     timeout: 10e3,
   });

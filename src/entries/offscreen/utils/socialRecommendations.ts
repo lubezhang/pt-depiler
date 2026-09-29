@@ -1,9 +1,9 @@
-import axios from "axios";
 import PQueue from "p-queue";
 import { getSocialRecommendations } from "@ptd/social";
 import type { ISocialRecommendationItem } from "@ptd/social";
 
 import { onMessage } from "@/messages.ts";
+import { socialHttpClient } from "~/extends/axios/resourceClient.ts";
 import { logger } from "./logger.ts";
 import { getSocialInformation } from "./socialInformation.ts";
 
@@ -121,7 +121,7 @@ async function fetchPosterDataUrl(
 
   for (const candidate of candidates) {
     try {
-      const response = await axios.get<Blob>(candidate, {
+      const response = await socialHttpClient(candidate).get<Blob>(candidate, {
         headers: isDoubanPosterUrl(candidate) ? { Referer: "https://m.douban.com/" } : undefined,
         responseType: "blob",
         timeout: posterFetchOptions.timeout,

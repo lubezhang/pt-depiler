@@ -11,7 +11,7 @@ use cookie::{time::OffsetDateTime, Cookie, SameSite};
 use cookie_store::{CookieDomain, CookiePath};
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 #[cfg(target_os = "macos")]
 use tempfile::NamedTempFile;
 #[cfg(target_os = "macos")]
@@ -26,6 +26,7 @@ use crate::{
 const HTTP_DEBUG_LOG_FILE: &str = "pt-depiler-http-debug.log";
 const HTTP_DEBUG_LOG_MAX_BYTES: u64 = 1_048_576;
 const SITE_LOGIN_WINDOW_LABEL: &str = "site-login";
+const SITE_LOGIN_CLOSED_EVENT: &str = "site-login://closed";
 #[cfg(target_os = "macos")]
 const CURL_STDERR_MAX_BYTES: u64 = 4_096;
 
@@ -961,6 +962,48 @@ fn prepare_login_window(
     window.set_focus().map_err(|error| error.to_string())
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SiteLoginClosed {
+    site_url: String,
+    cookie_count: usize,
+    error: Option<String>,
+}
+
+fn sync_closed_site_login(window: &WebviewWindow, app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let Ok(Some(site_url)) = state.take_site_login_target() else {
+        return;
+    };
+    let result = (|| {
+        let site_host = Url::parse(&site_url)
+            .map_err(|error| error.to_string())?
+            .host_str()
+            .ok_or("站点地址缺少主机名")?
+            .to_string();
+        let cookies = window.cookies().map_err(|error| error.to_string())?;
+        import_webview_cookies(cookies, &site_host, state.inner())
+    })();
+    let payload = match result {
+        Ok(cookie_count) => SiteLoginClosed {
+            site_url,
+            cookie_count,
+            error: None,
+        },
+        Err(error) => {
+            eprintln!("[site-login] failed to sync cookies: {error}");
+            SiteLoginClosed {
+                site_url,
+                cookie_count: 0,
+                error: Some("同步 Cookie 失败，请重新打开站点登录窗口。".to_string()),
+            }
+        }
+    };
+    if let Err(error) = app.emit_to("main", SITE_LOGIN_CLOSED_EVENT, payload) {
+        eprintln!("[site-login] failed to report login window close: {error}");
+    }
+}
+
 #[tauri::command]
 pub async fn open_site_login(
     site_url: String,
@@ -968,6 +1011,7 @@ pub async fn open_site_login(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let target_url = site_url.clone();
     let site_url = Url::parse(&site_url).map_err(|error| error.to_string())?;
     let login_url = Url::parse(&login_url).map_err(|error| error.to_string())?;
     if !matches!(site_url.scheme(), "http" | "https")
@@ -980,9 +1024,14 @@ pub async fn open_site_login(
         return Err("登录页必须与配置的站点地址同源".to_string());
     }
     let cookies = cookies_for_host(state.inner(), site_host)?;
+    state.set_site_login_target(target_url)?;
 
     if let Some(window) = app.get_webview_window(SITE_LOGIN_WINDOW_LABEL) {
-        return prepare_login_window(&window, &cookies, login_url);
+        let result = prepare_login_window(&window, &cookies, login_url);
+        if result.is_err() {
+            let _ = state.take_site_login_target();
+        }
+        return result;
     }
 
     let window = WebviewWindowBuilder::new(
@@ -996,8 +1045,23 @@ pub async fn open_site_login(
     .center()
     .on_navigation(|url| matches!(url.scheme(), "http" | "https" | "about"))
     .build()
-    .map_err(|error| error.to_string())?;
-    prepare_login_window(&window, &cookies, login_url)
+    .map_err(|error| {
+        let _ = state.take_site_login_target();
+        error.to_string()
+    })?;
+    let app_for_event = app.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            if let Some(login_window) = app_for_event.get_webview_window(SITE_LOGIN_WINDOW_LABEL) {
+                sync_closed_site_login(&login_window, &app_for_event);
+            }
+        }
+    });
+    let result = prepare_login_window(&window, &cookies, login_url);
+    if result.is_err() {
+        let _ = state.take_site_login_target();
+    }
+    result
 }
 
 #[tauri::command]
@@ -1013,6 +1077,7 @@ pub async fn finish_site_login(
         .ok_or("站点登录窗口未打开或已关闭")?;
     let cookies = window.cookies().map_err(|error| error.to_string())?;
     let count = import_webview_cookies(cookies, site_host, state.inner())?;
+    state.take_site_login_target()?;
     window.close().map_err(|error| error.to_string())?;
     Ok(count)
 }

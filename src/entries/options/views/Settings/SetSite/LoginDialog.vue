@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { TSiteID } from "@ptd/site";
 
 import {
-  finishInteractiveSiteLogin,
   getCaptchaImage,
   loginSite,
   openInteractiveSiteLogin,
   prepareSiteLogin,
   reportCaptchaImageRenderFailure,
+  verifySyncedSiteLogin,
   type PreparedSiteLogin,
 } from "@/options/service/siteLogin.ts";
 
@@ -19,6 +20,13 @@ const props = defineProps<{
   siteUrl?: string;
   schema?: string;
 }>();
+const emit = defineEmits<{ (e: "success", cookieCount: number): void }>();
+
+interface SiteLoginClosedEvent {
+  siteUrl: string;
+  cookieCount: number;
+  error?: string;
+}
 
 const { t } = useI18n();
 const username = ref("");
@@ -28,13 +36,62 @@ const remember = ref(true);
 const showPassword = ref(false);
 const loading = ref(false);
 const errorMessage = ref("");
-const successMessage = ref("");
 const noticeMessage = ref("");
+const showAdvanced = ref(false);
 const captcha = ref("");
 const captchaImageUrl = ref<string>();
 const preparedLogin = shallowRef<PreparedSiteLogin>();
 const browserLoginOpened = ref(false);
 const canSubmit = computed(() => !!props.siteUrl && !!username.value && !!password.value && !loading.value);
+const siteHost = computed(() => {
+  try {
+    return props.siteUrl ? new URL(props.siteUrl).host : "";
+  } catch {
+    return "";
+  }
+});
+let unlistenClose: UnlistenFn | undefined;
+let closeListenerPromise: Promise<void> | undefined;
+let disposed = false;
+
+async function ensureCloseListener() {
+  closeListenerPromise ??= listen<SiteLoginClosedEvent>("site-login://closed", (event) => {
+    void handleBrowserClosed(event.payload);
+  }).then((unlisten) => {
+    if (disposed) unlisten();
+    else unlistenClose = unlisten;
+  });
+  try {
+    await closeListenerPromise;
+  } catch (error) {
+    closeListenerPromise = undefined;
+    throw error;
+  }
+}
+
+async function handleBrowserClosed(event: SiteLoginClosedEvent) {
+  if (!browserLoginOpened.value || !props.siteUrl) return;
+  try {
+    if (new URL(event.siteUrl).host !== siteHost.value) return;
+  } catch {
+    return;
+  }
+  browserLoginOpened.value = false;
+  loading.value = true;
+  errorMessage.value = "";
+  noticeMessage.value = t("SetSite.login.verifying");
+  try {
+    if (event.error) throw new Error(event.error);
+    const result = await verifySyncedSiteLogin({ siteId: props.siteId, siteUrl: props.siteUrl }, event.cookieCount);
+    emit("success", result.cookieCount);
+    showDialog.value = false;
+  } catch (error) {
+    noticeMessage.value = "";
+    errorMessage.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    loading.value = false;
+  }
+}
 
 function clearPreparedLogin() {
   if (captchaImageUrl.value) {
@@ -54,38 +111,19 @@ async function openBrowserLogin() {
   if (!props.siteUrl) return;
   loading.value = true;
   errorMessage.value = "";
-  successMessage.value = "";
   try {
+    await ensureCloseListener();
+    browserLoginOpened.value = true;
     await openInteractiveSiteLogin({
       siteUrl: props.siteUrl,
       schema: props.schema,
       loginPath: loginPath.value,
     });
-    browserLoginOpened.value = true;
-    noticeMessage.value = t("SetSite.login.browserOpened");
+    if (browserLoginOpened.value && showDialog.value) {
+      noticeMessage.value = t("SetSite.login.browserOpened");
+    }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function finishBrowserLogin() {
-  if (!props.siteUrl) return;
-  loading.value = true;
-  errorMessage.value = "";
-  successMessage.value = "";
-  try {
-    const result = await finishInteractiveSiteLogin({
-      siteId: props.siteId,
-      siteUrl: props.siteUrl,
-      schema: props.schema,
-      loginPath: loginPath.value,
-    });
     browserLoginOpened.value = false;
-    noticeMessage.value = "";
-    successMessage.value = t("SetSite.login.success", { count: result.cookieCount });
-  } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : String(error);
   } finally {
     loading.value = false;
@@ -108,15 +146,20 @@ watch(showDialog, (visible) => {
   if (!visible) {
     clearSensitiveState();
     errorMessage.value = "";
-    successMessage.value = "";
     noticeMessage.value = "";
     browserLoginOpened.value = false;
+    showAdvanced.value = false;
     return;
   }
+  void openBrowserLogin();
 });
 
 watch(loginPath, clearPreparedLogin);
-onBeforeUnmount(clearSensitiveState);
+onBeforeUnmount(() => {
+  disposed = true;
+  unlistenClose?.();
+  clearSensitiveState();
+});
 
 async function prepareLoginPage() {
   if (!props.siteUrl || preparedLogin.value) return;
@@ -144,7 +187,6 @@ async function submit() {
   if (!props.siteUrl) return;
   loading.value = true;
   errorMessage.value = "";
-  successMessage.value = "";
   noticeMessage.value = "";
   try {
     const input = {
@@ -170,7 +212,8 @@ async function submit() {
     }
     const result = await loginSite(input, preparedLogin.value, captcha.value);
     clearSensitiveState();
-    successMessage.value = t("SetSite.login.success", { count: result.cookieCount });
+    emit("success", result.cookieCount);
+    showDialog.value = false;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     clearSensitiveState();
@@ -183,19 +226,17 @@ async function submit() {
 </script>
 
 <template>
-  <v-dialog v-model="showDialog" max-width="560">
+  <v-dialog v-model="showDialog" max-width="520" persistent>
     <v-card>
       <v-card-title>{{ t("SetSite.login.title") }}</v-card-title>
+      <v-card-subtitle>{{ siteHost }}</v-card-subtitle>
       <v-card-text>
-        <v-alert class="mb-4" density="compact" type="info" variant="tonal">
-          {{ t("SetSite.login.notice") }}
+        <v-alert v-if="noticeMessage" class="mb-4" density="compact" type="info" variant="tonal">
+          {{ noticeMessage }}
         </v-alert>
-        <v-text-field
-          v-model="loginPath"
-          :hint="t('SetSite.login.loginPathHint')"
-          :label="t('SetSite.login.loginPath')"
-          persistent-hint
-        />
+        <v-alert v-if="errorMessage" class="mb-4" density="compact" type="error" variant="tonal">
+          {{ errorMessage }}
+        </v-alert>
         <v-btn
           block
           color="primary"
@@ -205,59 +246,55 @@ async function submit() {
           :loading="loading"
           @click="openBrowserLogin"
         >
-          {{ t("SetSite.login.openBrowser") }}
+          {{ t(browserLoginOpened ? "SetSite.login.returnBrowser" : "SetSite.login.openBrowser") }}
         </v-btn>
         <v-btn
-          v-if="browserLoginOpened"
-          block
-          class="mt-2"
-          color="success"
-          data-testid="finish-browser-login"
-          prepend-icon="mdi-cookie-check"
-          variant="outlined"
-          :loading="loading"
-          @click="finishBrowserLogin"
+          class="mt-4 px-0"
+          data-testid="toggle-advanced-login"
+          :append-icon="showAdvanced ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+          variant="text"
+          @click="showAdvanced = !showAdvanced"
         >
-          {{ t("SetSite.login.finishBrowser") }}
+          {{ t("SetSite.login.advanced") }}
         </v-btn>
-        <v-divider class="my-5" />
-        <div class="text-subtitle-2 mb-3">{{ t("SetSite.login.formFallback") }}</div>
-        <v-text-field v-model="username" :label="t('common.username')" autocomplete="username" />
-        <v-text-field
-          v-model="password"
-          :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
-          :label="t('SetSite.login.password')"
-          :type="showPassword ? 'text' : 'password'"
-          autocomplete="current-password"
-          @click:append-inner="showPassword = !showPassword"
-        />
-        <template v-if="preparedLogin?.captcha">
-          <v-img
-            v-if="captchaImageUrl"
-            :src="captchaImageUrl"
-            class="mt-4 border"
-            height="96"
-            max-width="240"
-            contain
-            @error="handleCaptchaImageError"
+        <div v-if="showAdvanced" class="mt-2">
+          <v-text-field
+            v-model="loginPath"
+            :hint="t('SetSite.login.loginPathHint')"
+            :label="t('SetSite.login.loginPath')"
+            persistent-hint
           />
-          <v-text-field v-model="captcha" :label="t('SetSite.login.captcha')" autocomplete="off" class="mt-2" />
-        </template>
-        <v-checkbox v-model="remember" :label="t('SetSite.login.remember')" density="compact" hide-details />
-        <v-alert v-if="errorMessage" class="mt-4" density="compact" type="error" variant="tonal">
-          {{ errorMessage }}
-        </v-alert>
-        <v-alert v-if="noticeMessage" class="mt-4" density="compact" type="warning" variant="tonal">
-          {{ noticeMessage }}
-        </v-alert>
-        <v-alert v-if="successMessage" class="mt-4" density="compact" type="success" variant="tonal">
-          {{ successMessage }}
-        </v-alert>
+          <v-divider class="my-4" />
+          <div class="text-subtitle-2 mb-3">{{ t("SetSite.login.formFallback") }}</div>
+          <v-text-field v-model="username" :label="t('common.username')" autocomplete="username" />
+          <v-text-field
+            v-model="password"
+            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            :label="t('SetSite.login.password')"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="current-password"
+            @click:append-inner="showPassword = !showPassword"
+          />
+          <template v-if="preparedLogin?.captcha">
+            <v-img
+              v-if="captchaImageUrl"
+              :src="captchaImageUrl"
+              class="mt-4 border"
+              height="96"
+              max-width="240"
+              contain
+              @error="handleCaptchaImageError"
+            />
+            <v-text-field v-model="captcha" :label="t('SetSite.login.captcha')" autocomplete="off" class="mt-2" />
+          </template>
+          <v-checkbox v-model="remember" :label="t('SetSite.login.remember')" density="compact" hide-details />
+        </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
         <v-btn :disabled="loading" variant="text" @click="showDialog = false">{{ t("common.dialog.cancel") }}</v-btn>
         <v-btn
+          v-if="showAdvanced"
           :disabled="!canSubmit"
           :loading="loading"
           color="primary"

@@ -19,6 +19,7 @@ import {
   loginSite,
   openInteractiveSiteLogin,
   prepareSiteLogin,
+  verifySyncedSiteLogin,
   type PreparedSiteLogin,
   type SiteLoginInput,
 } from "./siteLogin.ts";
@@ -118,13 +119,30 @@ describe("prepareSiteLogin", () => {
 });
 
 describe("应用内站点页面登录", () => {
-  it("打开 schema 默认登录页", async () => {
+  it("默认打开站点首页，以适配不同站点的登录入口", async () => {
     await openInteractiveSiteLogin({ siteUrl: "https://tracker.example/", schema: "Unit3D" });
 
     expect(mocks.invoke).toHaveBeenCalledWith("open_site_login", {
       siteUrl: "https://tracker.example/",
-      loginUrl: "https://tracker.example/login",
+      loginUrl: "https://tracker.example/",
     });
+  });
+
+  it("自定义登录路径仍可打开指定页面", async () => {
+    await openInteractiveSiteLogin({ siteUrl: "https://tracker.example/", loginPath: "/auth/login" });
+    expect(mocks.invoke).toHaveBeenCalledWith("open_site_login", {
+      siteUrl: "https://tracker.example/",
+      loginUrl: "https://tracker.example/auth/login",
+    });
+  });
+
+  it("窗口关闭后验证已同步的 Cookie", async () => {
+    const siteRequest = vi.fn().mockResolvedValue({});
+    mocks.getSite.mockResolvedValue({ request: siteRequest });
+    await expect(
+      verifySyncedSiteLogin({ siteId: "fixture-site" as never, siteUrl: "https://tracker.example/" }, 2),
+    ).resolves.toEqual({ cookieCount: 2, finalUrl: "https://tracker.example/" });
+    expect(siteRequest).toHaveBeenCalledTimes(1);
   });
 
   it("同步原生 WebView Cookie 后验证真实登录态", async () => {

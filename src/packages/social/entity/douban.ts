@@ -1,5 +1,5 @@
-import axios from "axios";
 import Sizzle from "sizzle";
+import { socialHttpClient } from "~/extends/axios/resourceClient.ts";
 import {
   IFetchSocialSiteInformationConfig,
   IPtgenApiResponse,
@@ -175,7 +175,7 @@ export async function fetchInformation(
   } as ISocialInformation;
 
   try {
-    const { data } = await axios.get<Document>(build(realId), {
+    const { data } = await socialHttpClient(build(realId)).get<Document>(build(realId), {
       responseType: "document",
       timeout: config.timeout ?? 10e3,
     });

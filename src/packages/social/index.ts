@@ -1,4 +1,4 @@
-import axios from "axios";
+import { socialHttpClient } from "~/extends/axios/resourceClient.ts";
 import {
   IFetchSocialSiteInformationConfig,
   ISocialInformation,
@@ -71,7 +71,7 @@ export async function getSocialSiteInformation(
     for (const ptGenEndpointElement of new Set<string>([ptGenEndpoint, buildInPtGenApi.at(-1)!.url].filter(Boolean))) {
       const ptGenUrl = ptGenEndpointElement.replace("<site>", site).replace("<sid>", id);
       try {
-        const req = await axios.get(ptGenUrl, { timeout, responseType: "json" });
+        const req = await socialHttpClient(ptGenUrl).get(ptGenUrl, { timeout, responseType: "json" });
         if (req.status === 200) {
           const data = req.data as any;
           if (data.success !== false) {

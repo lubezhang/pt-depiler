@@ -30,6 +30,13 @@ const siteTimezoneOffset = computed({
 const customSiteUrl = ref<string>("");
 const isFormValid = ref<boolean>(true);
 const showLoginDialog = ref(false);
+const loginCookieCount = ref(0);
+
+watch(siteId, () => (loginCookieCount.value = 0));
+watch(
+  () => siteUserConfig.value.url,
+  () => (loginCookieCount.value = 0),
+);
 
 function updateFormValid(v: boolean) {
   isFormValid.value = v;
@@ -185,19 +192,26 @@ const timeZone: Array<{ value: timezoneOffset; title: string }> = [
 
         <v-divider />
 
-        <div class="d-flex align-center my-4">
+        <div class="d-flex align-center justify-space-between flex-wrap ga-3 my-4">
           <div>
             <v-label>{{ t("SetSite.login.section") }}</v-label>
-            <div class="text-caption text-medium-emphasis">{{ t("SetSite.login.sectionHint") }}</div>
+            <div class="text-caption text-medium-emphasis">
+              {{
+                loginCookieCount
+                  ? t("SetSite.login.success", { count: loginCookieCount })
+                  : t("SetSite.login.sectionHint")
+              }}
+            </div>
           </div>
-          <v-spacer />
           <v-btn
             :disabled="!siteUserConfig.url"
-            color="primary"
-            icon="mdi-login"
-            :title="t('SetSite.login.open')"
+            :color="loginCookieCount ? 'success' : 'primary'"
+            :prepend-icon="loginCookieCount ? 'mdi-cookie-check' : 'mdi-login'"
+            variant="tonal"
             @click="showLoginDialog = true"
-          />
+          >
+            {{ t(loginCookieCount ? "SetSite.login.reLogin" : "SetSite.login.open") }}
+          </v-btn>
         </div>
 
         <template v-if="siteMetaData.userInputSettingMeta && siteUserConfig.inputSetting">
@@ -291,6 +305,7 @@ const timeZone: Array<{ value: timezoneOffset; title: string }> = [
       :schema="siteMetaData.schema"
       :site-id="siteId"
       :site-url="siteUserConfig.url"
+      @success="(count) => (loginCookieCount = count)"
     />
   </v-card>
 </template>

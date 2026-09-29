@@ -3,22 +3,24 @@ import { defineComponent } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  finishInteractiveSiteLogin: vi.fn(),
   getCaptchaImage: vi.fn(),
   loginSite: vi.fn(),
+  listen: vi.fn(),
   openInteractiveSiteLogin: vi.fn(),
   prepareSiteLogin: vi.fn(),
   reportCaptchaImageRenderFailure: vi.fn(),
+  verifySyncedSiteLogin: vi.fn(),
 }));
 
 vi.mock("vue-i18n", () => ({ useI18n: () => ({ t: (key: string) => key }) }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: mocks.listen }));
 vi.mock("@/options/service/siteLogin.ts", () => ({
-  finishInteractiveSiteLogin: mocks.finishInteractiveSiteLogin,
   getCaptchaImage: mocks.getCaptchaImage,
   loginSite: mocks.loginSite,
   openInteractiveSiteLogin: mocks.openInteractiveSiteLogin,
   prepareSiteLogin: mocks.prepareSiteLogin,
   reportCaptchaImageRenderFailure: mocks.reportCaptchaImageRenderFailure,
+  verifySyncedSiteLogin: mocks.verifySyncedSiteLogin,
 }));
 
 import LoginDialog from "./LoginDialog.vue";
@@ -58,6 +60,7 @@ const stubs = {
   VBtn,
   VCard: passthrough("VCard"),
   VCardActions: passthrough("VCardActions"),
+  VCardSubtitle: passthrough("VCardSubtitle"),
   VCardText: passthrough("VCardText"),
   VCardTitle: passthrough("VCardTitle"),
   VCheckbox,
@@ -99,6 +102,7 @@ async function openDialog(): Promise<VueWrapper> {
 }
 
 async function enterCredentials(wrapper: VueWrapper, password = "plain-secret") {
+  await wrapper.get('[data-testid="toggle-advanced-login"]').trigger("click");
   await wrapper.get('[data-label="common.username"]').setValue("alice");
   await wrapper.get('[data-label="SetSite.login.password"]').setValue(password);
 }
@@ -108,12 +112,14 @@ function passwordValue(wrapper: VueWrapper): string {
 }
 
 beforeEach(() => {
-  mocks.finishInteractiveSiteLogin.mockReset();
   mocks.getCaptchaImage.mockReset();
   mocks.loginSite.mockReset();
+  mocks.listen.mockReset();
   mocks.openInteractiveSiteLogin.mockReset();
   mocks.prepareSiteLogin.mockReset();
   mocks.reportCaptchaImageRenderFailure.mockReset();
+  mocks.verifySyncedSiteLogin.mockReset();
+  mocks.listen.mockResolvedValue(vi.fn());
   mocks.prepareSiteLogin.mockResolvedValue(preparedLogin());
   mocks.getCaptchaImage.mockResolvedValue(undefined);
   mocks.openInteractiveSiteLogin.mockResolvedValue(undefined);
@@ -141,6 +147,10 @@ describe("LoginDialog 密码生命周期", () => {
       expect.any(Object),
       "",
     );
+    await wrapper.setProps({ modelValue: false });
+    await wrapper.setProps({ modelValue: true });
+    await flushPromises();
+    await wrapper.get('[data-testid="toggle-advanced-login"]').trigger("click");
     expect(passwordValue(wrapper)).toBe("");
     wrapper.unmount();
   });
@@ -165,7 +175,9 @@ describe("LoginDialog 密码生命周期", () => {
     expect(passwordValue(wrapper)).toBe("plain-secret");
 
     await wrapper.setProps({ modelValue: false });
-
+    await wrapper.setProps({ modelValue: true });
+    await flushPromises();
+    await wrapper.get('[data-testid="toggle-advanced-login"]').trigger("click");
     expect(passwordValue(wrapper)).toBe("");
     wrapper.unmount();
   });
@@ -203,27 +215,54 @@ describe("LoginDialog 密码生命周期", () => {
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:captcha");
   });
 
-  it("在站点窗口完成登录后同步 Cookie 并显示成功状态", async () => {
-    mocks.finishInteractiveSiteLogin.mockResolvedValue({
+  it("打开弹窗即进入网站登录，关闭网站窗口后自动验证 Cookie", async () => {
+    mocks.verifySyncedSiteLogin.mockResolvedValue({
       cookieCount: 2,
       finalUrl: "https://tracker.example/",
     });
     const wrapper = await openDialog();
-
-    await wrapper.get('[data-testid="open-browser-login"]').trigger("click");
-    await flushPromises();
     expect(mocks.openInteractiveSiteLogin).toHaveBeenCalledWith({
       siteUrl: "https://tracker.example/",
       schema: "NexusPHP",
       loginPath: "",
     });
-
-    await wrapper.get('[data-testid="finish-browser-login"]').trigger("click");
+    expect(wrapper.text()).not.toContain("SetSite.login.formFallback");
+    const onClose = mocks.listen.mock.calls[0][1] as (event: { payload: unknown }) => void;
+    onClose({ payload: { siteUrl: "https://tracker.example/", cookieCount: 2 } });
     await flushPromises();
-    expect(mocks.finishInteractiveSiteLogin).toHaveBeenCalledWith(
-      expect.objectContaining({ siteId: "fixture-site", siteUrl: "https://tracker.example/" }),
+    expect(mocks.verifySyncedSiteLogin).toHaveBeenCalledWith(
+      { siteId: "fixture-site", siteUrl: "https://tracker.example/" },
+      2,
     );
-    expect(wrapper.text()).toContain("SetSite.login.success");
+    expect(wrapper.emitted("success")?.[0]).toEqual([2]);
+    expect(wrapper.emitted("update:modelValue")?.at(-1)).toEqual([false]);
+    wrapper.unmount();
+  });
+
+  it("自动同步失败时保留重试入口并隐藏高级表单", async () => {
+    mocks.verifySyncedSiteLogin.mockRejectedValue(new Error("尚未登录"));
+    const wrapper = await openDialog();
+    const onClose = mocks.listen.mock.calls[0][1] as (event: { payload: unknown }) => void;
+    onClose({ payload: { siteUrl: "https://tracker.example/", cookieCount: 1 } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("尚未登录");
+    expect(wrapper.find('[data-testid="open-browser-login"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("SetSite.login.formFallback");
+    wrapper.unmount();
+  });
+
+  it("Cookie 同步错误时给出提示，其他站点的关闭事件不改变当前登录", async () => {
+    const wrapper = await openDialog();
+    const onClose = mocks.listen.mock.calls[0][1] as (event: { payload: unknown }) => void;
+    onClose({ payload: { siteUrl: "https://other.example/", cookieCount: 1 } });
+    await flushPromises();
+    expect(mocks.verifySyncedSiteLogin).not.toHaveBeenCalled();
+
+    onClose({ payload: { siteUrl: "https://tracker.example/", cookieCount: 0, error: "同步失败" } });
+    await flushPromises();
+    expect(wrapper.text()).toContain("同步失败");
+    expect(mocks.verifySyncedSiteLogin).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });
