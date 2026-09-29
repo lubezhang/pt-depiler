@@ -8,10 +8,10 @@
  *
  */
 
-import axiosRaw from "axios";
 import { get, set } from "es-toolkit/compat";
 
 import { sendMessage } from "@/messages.ts";
+import { legacySiteHttp } from "~/extends/axios/resourceClient.ts";
 
 export { isCloudflareBlocked } from "~/extends/axios/retryWhenCloudflareBlock.ts";
 export { sleep } from "~/helper.ts";
@@ -20,8 +20,8 @@ import type { ISiteUserConfig } from "../types";
 import type { IExtensionStorageSchema } from "@/storage.ts";
 import type { IMetadataPiniaStorageSchema } from "@/shared/types/storages/metadata.ts";
 
-// Tauri 迁移：请求统一走 Rust ptd_fetch（见 extends/axios/tauriAdapter.ts），不再需要 unsafeHeader / CF 重试拦截器。
-export const axios = axiosRaw;
+// 站点请求必须经 Tauri IPC 发出，避免 WebView 跨域限制并复用 Rust 侧 Cookie Jar。
+export const axios = legacySiteHttp;
 
 /**
  * 存储数据到 metadata.site[siteId].runtimeSettings[key] 中，
