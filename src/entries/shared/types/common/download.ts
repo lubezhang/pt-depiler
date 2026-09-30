@@ -53,6 +53,7 @@ export interface ITorrentDownloadMetadata extends Pick<ITorrent, "title" | "subT
 
   downloadRequestConfig?: AxiosRequestConfig;
   addTorrentResult?: CAddTorrentResult;
+  errorMessage?: string;
 }
 
 export interface IDownloadTorrentResult {

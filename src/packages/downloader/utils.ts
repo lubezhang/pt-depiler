@@ -34,23 +34,39 @@ export function extractMagnetHash(magnetUri: string): string | null {
 }
 
 export async function getRemoteTorrentFile(options: AxiosRequestConfig = {}): Promise<ParsedTorrent> {
-  const req = await axios.request({
+  let req = await axios.request({
     ...options,
+    // Some PT sites return the torrent body on a 302 and use Location only for
+    // a first-download notice. Following it replaces the torrent with HTML.
+    maxRedirects: 0,
+    validateStatus: (status) => status >= 200 && status < 400,
     responseType: "arraybuffer", // 统一以 ArrayBuffer 形式获取，方便后面转化
   });
 
-  /**
-   * 如果服务器设置了 content-type 响应头，
-   * 但响应头值不是 application/x-bittorrent 或 application/octet-stream，
-   * 则我们认为非正常的种子：
-   */
-  if (req.headers["content-type"] && !/octet-stream|x-bittorrent/gi.test(<string>req.headers["content-type"])) {
-    throw new Error("Invalid Torrent From Server");
-  }
-
   // 将获取到的 ArrayBuffer 转成 Buffer
+  let parsedInfo: TorrentInstance;
+  try {
+    // 部分站点会用 application/force-download 等 MIME 类型返回合法种子，不能只依赖响应头判断。
+    parsedInfo = (await parseTorrent(Buffer.from(req.data, "binary"))) as TorrentInstance;
+  } catch (error) {
+    const fallbackMaxRedirects = options.maxRedirects ?? 10;
+    const canFollowRedirect =
+      req.status >= 300 && req.status < 400 && Boolean(req.headers.location) && fallbackMaxRedirects > 0;
+    if (!canFollowRedirect) throw new Error("Invalid Torrent From Server", { cause: error });
+
+    req = await axios.request({
+      ...options,
+      maxRedirects: fallbackMaxRedirects,
+      validateStatus: (status) => status >= 200 && status < 400,
+      responseType: "arraybuffer",
+    });
+    try {
+      parsedInfo = (await parseTorrent(Buffer.from(req.data, "binary"))) as TorrentInstance;
+    } catch (fallbackError) {
+      throw new Error("Invalid Torrent From Server", { cause: fallbackError });
+    }
+  }
   const metaDataBuffer = Buffer.from(req.data, "binary");
-  const parsedInfo = (await parseTorrent(metaDataBuffer)) as TorrentInstance;
 
   /**
    * 设置种子名字

@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use cookie_store::CookieStore;
-use reqwest::Client;
+use reqwest::{redirect::Policy, Client};
 use reqwest_cookie_store::CookieStoreMutex;
 use tauri::Manager;
 use tempfile::NamedTempFile;
@@ -88,6 +88,7 @@ fn sync_directory(_path: &Path) -> Result<(), String> {
 /// 全局应用状态。Cookie Store 由所有请求共享，并按 RFC 6265 的 domain/path 规则隔离。
 pub struct AppState {
     pub client: Client,
+    pub(crate) no_redirect_client: Client,
     pub cookie_store: Arc<CookieStoreMutex>,
     http_cancellations: Mutex<HttpCancellationRegistry>,
     site_login_target: Mutex<Option<String>>,
@@ -143,15 +144,23 @@ impl AppState {
         let cookie_store = Arc::new(CookieStoreMutex::new(store));
         let mut client_builder = Client::builder()
             .cookie_provider(Arc::clone(&cookie_store))
-            .redirect(reqwest::redirect::Policy::limited(10));
+            .redirect(Policy::limited(10));
+        let mut no_redirect_client_builder = Client::builder()
+            .cookie_provider(Arc::clone(&cookie_store))
+            .redirect(Policy::none());
         if !use_system_proxy {
             client_builder = client_builder.no_proxy();
+            no_redirect_client_builder = no_redirect_client_builder.no_proxy();
         }
         let client = client_builder
             .build()
             .expect("failed to build reqwest client");
+        let no_redirect_client = no_redirect_client_builder
+            .build()
+            .expect("failed to build no-redirect reqwest client");
         Self {
             client,
+            no_redirect_client,
             cookie_store,
             http_cancellations: Mutex::new(HttpCancellationRegistry::default()),
             site_login_target: Mutex::new(None),

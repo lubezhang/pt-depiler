@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { reactive } from "vue";
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (message: { data: any }) => Promise<unknown>>();
@@ -74,6 +75,98 @@ afterEach(() => {
 });
 
 describe("下载失败边界", () => {
+  it("响应式种子和下载选项可以写入下载历史并发送到下载器", async () => {
+    const addTorrent = vi.fn().mockResolvedValue({ success: true });
+    mocks.getDownloader.mockResolvedValue({ addTorrent });
+    mocks.sendMessage.mockImplementation((name: string, key?: string) => {
+      if (name !== "getExtStorage") return Promise.resolve(undefined);
+      if (key === "metadata") {
+        return Promise.resolve({ downloaders: { "reactive-remote": { id: "reactive-remote", enabled: true } } });
+      }
+      return Promise.resolve({ download: {} });
+    });
+    mocks.put.mockImplementation((_: string, value: Record<string, unknown>) => {
+      const stored = structuredClone(value);
+      const id = (stored.id as number | undefined) ?? 1;
+      mocks.history.set(id, { ...stored, id });
+      return id;
+    });
+
+    const torrent = reactive({ title: "Test torrent", link: "https://tracker.test/a", tags: [{ name: "Free" }] });
+    const addTorrentOptions = reactive({ localDownload: true, advanceAddTorrentOptions: { sequentialDownload: true } });
+
+    await expect(
+      downloadHandler()({ data: { torrent, downloaderId: "reactive-remote", addTorrentOptions } }),
+    ).resolves.toMatchObject({ downloadStatus: "completed" });
+    expect(mocks.history.get(1)).toMatchObject({
+      downloadStatus: "completed",
+      torrent: { title: "Test torrent", tags: [{ name: "Free" }] },
+      addTorrentOptions: { advanceAddTorrentOptions: { sequentialDownload: true } },
+    });
+    expect(addTorrent).toHaveBeenCalledWith("https://tracker.test/a", expect.any(Object));
+  });
+
+  it("请求配置诊断无法结构化克隆时仍完成下载", async () => {
+    const addTorrent = vi.fn().mockResolvedValue({ success: true });
+    mocks.getDownloader.mockResolvedValue({ addTorrent });
+    mocks.getSiteInstance.mockResolvedValue({
+      downloadInterval: 0,
+      userConfig: {},
+      getTorrentDownloadRequestConfig: vi.fn().mockResolvedValue({
+        url: "https://tracker.test/a",
+        method: "GET",
+        transformRequest: [() => undefined],
+      }),
+    });
+    mocks.sendMessage.mockImplementation((name: string, key?: string) => {
+      if (name !== "getExtStorage") return Promise.resolve(undefined);
+      if (key === "metadata") {
+        return Promise.resolve({
+          downloaders: { "diagnostic-remote": { id: "diagnostic-remote", enabled: true } },
+        });
+      }
+      return Promise.resolve({ download: {} });
+    });
+    mocks.put.mockImplementation((_: string, value: Record<string, unknown>) => {
+      const stored = structuredClone(value);
+      const id = (stored.id as number | undefined) ?? 1;
+      mocks.history.set(id, { ...stored, id });
+      return id;
+    });
+
+    await expect(
+      downloadHandler()({
+        data: {
+          torrent: { site: "siteA", title: "Test torrent", link: "https://tracker.test/a" },
+          downloaderId: "diagnostic-remote",
+        },
+      }),
+    ).resolves.toMatchObject({ downloadStatus: "completed" });
+    expect(addTorrent).toHaveBeenCalled();
+  });
+
+  it("下载器异常会写入可追踪的失败原因", async () => {
+    mocks.history.set(6, { id: 6, downloadStatus: "pending" });
+    mocks.getDownloader.mockResolvedValue({ addTorrent: vi.fn().mockRejectedValue(new Error("torrent fetch failed")) });
+    mocks.sendMessage.mockImplementation((name: string, key?: string) => {
+      if (name !== "getExtStorage") return Promise.resolve(undefined);
+      if (key === "metadata") return Promise.resolve({ downloaders: { failing: { id: "failing", enabled: true } } });
+      return Promise.resolve({ download: {} });
+    });
+
+    await expect(
+      downloadHandler()({
+        data: {
+          downloadId: 6,
+          torrent: { link: "https://tracker.test/a" },
+          downloaderId: "failing",
+          addTorrentOptions: {},
+        },
+      }),
+    ).resolves.toMatchObject({ downloadStatus: "failed", errorMessage: "torrent fetch failed" });
+    expect(mocks.history.get(6)).toMatchObject({ downloadStatus: "failed", errorMessage: "torrent fetch failed" });
+  });
+
   it("非零短延迟调度不会阻塞原下载调用", async () => {
     mocks.history.set(1, { id: 1, downloadStatus: "pending" });
     mocks.getSiteInstance.mockResolvedValue({

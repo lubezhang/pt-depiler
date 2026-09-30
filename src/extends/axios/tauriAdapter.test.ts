@@ -40,6 +40,7 @@ describe("tauriAdapter IPC 接线", () => {
       headers: new AxiosHeaders({ "Content-Type": "application/x-www-form-urlencoded" }),
       data: form,
       timeout: 4_321,
+      maxRedirects: 0,
       responseType: "arraybuffer",
       validateStatus: (status: number) => status >= 200 && status < 300,
     } as InternalAxiosRequestConfig;
@@ -55,6 +56,7 @@ describe("tauriAdapter IPC 接线", () => {
       url: "https://tracker.example/upload?existing=1&tag%5B%5D=one&tag%5B%5D=two",
       method: "post",
       timeout: 4_321,
+      maxRedirects: 0,
       binary: true,
       body: { kind: "base64" },
     });

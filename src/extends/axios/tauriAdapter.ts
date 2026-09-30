@@ -83,6 +83,7 @@ export function createTauriAdapter(identity?: HttpResourceIdentity): AxiosAdapte
         headers: serialized.headers,
         body: serialized.body,
         timeout: config.timeout,
+        maxRedirects: config.maxRedirects,
         binary,
       },
     }).catch((error: unknown) => Promise.reject(toAxiosTransportError(error, config)));

@@ -1,5 +1,5 @@
 import axios, { type AxiosRequestConfig } from "axios";
-import { toMerged } from "es-toolkit";
+import { cloneDeep, toMerged } from "es-toolkit";
 import { isEmpty } from "es-toolkit/compat";
 
 import {
@@ -240,7 +240,8 @@ onMessage(
 );
 onMessage(
   "setDownloadServiceTorrentLocation",
-  async ({ data }) => await downloadService.setTorrentLocation(data.downloaderId, data.torrentId, data.location, data.move),
+  async ({ data }) =>
+    await downloadService.setTorrentLocation(data.downloaderId, data.torrentId, data.location, data.move),
 );
 onMessage(
   "startDownloadServiceTorrents",
@@ -341,8 +342,6 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
     await patchDownloadHistory(downloadId!, { downloadRequestConfig });
   } catch (error) {
     reportDownloadFailure("Failed to persist torrent download request diagnostics", error);
-    downloadStatus = "failed";
-    return { downloadId, downloadStatus, errorMessage: getErrorMessage(error) } as IDownloadTorrentResult;
   }
 
   try {
@@ -369,6 +368,14 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
     if (e instanceof DownloadStatusPersistenceError) throw e;
     downloadStatus = "failed";
     errorMessage = getErrorMessage(e);
+  }
+
+  if (errorMessage) {
+    try {
+      await patchDownloadHistory(downloadId, { errorMessage });
+    } catch (error) {
+      reportDownloadFailure("Failed to persist torrent download error", error);
+    }
   }
 
   await setDownloadStatus(downloadId, downloadStatus);
@@ -590,7 +597,8 @@ const downloadHistoryRepository: Repository<TTorrentDownloadKey, ITorrentDownloa
     return await (await ptdIndexDb).get("download_history", downloadId);
   },
   async insert(history) {
-    return await (await ptdIndexDb).put("download_history", history);
+    // Vue 响应式代理不能写入 IndexedDB，保存前复制为普通对象。
+    return await (await ptdIndexDb).put("download_history", cloneDeep(history));
   },
   async save(history) {
     await (await ptdIndexDb).put("download_history", history);

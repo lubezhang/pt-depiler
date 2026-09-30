@@ -124,6 +124,9 @@ pub struct FetchRequest {
     pub max_retries: Option<u32>,
     /// 是否以二进制方式返回 body（base64 编码），用于种子文件等
     pub binary: Option<bool>,
+    /// Axios-compatible redirect limit. `0` preserves the original response,
+    /// which is required by sites that put a torrent body on a 302 response.
+    pub max_redirects: Option<usize>,
 }
 
 #[tauri::command]
@@ -199,10 +202,12 @@ async fn send_with_reqwest(
     timeout: Duration,
     state: &AppState,
 ) -> Result<RawHttpResponse, String> {
-    let mut builder = state
-        .client
-        .request(method.clone(), &req.url)
-        .timeout(timeout);
+    let client = if req.max_redirects == Some(0) {
+        &state.no_redirect_client
+    } else {
+        &state.client
+    };
+    let mut builder = client.request(method.clone(), &req.url).timeout(timeout);
     if let Some(headers) = &req.headers {
         for (key, value) in headers {
             builder = builder.header(key, value);
@@ -1362,6 +1367,7 @@ mod tests {
             timeout: Some(2_000),
             max_retries: Some(0),
             binary: Some(false),
+            max_redirects: None,
         }
     }
 
@@ -1456,6 +1462,46 @@ mod tests {
             assert_eq!(response.body, expected, "unexpected semantics for {status}");
             assert_eq!(response.final_url, server.url("/target"));
         }
+    }
+
+    #[tokio::test]
+    async fn preserves_torrent_body_when_redirects_are_disabled() {
+        let torrent_body = b"d4:infod4:name4:testee".to_vec();
+        let server = TestServer::spawn(move |request| match request.path.as_str() {
+            "/download" => TestResponse {
+                status: 302,
+                headers: vec![
+                    ("Location".to_string(), "/downloadnotice".to_string()),
+                    (
+                        "Content-Type".to_string(),
+                        "application/x-bittorrent".to_string(),
+                    ),
+                ],
+                body: torrent_body.clone(),
+            },
+            "/downloadnotice" => TestResponse::ok("<html>notice</html>"),
+            _ => TestResponse::ok(Vec::new()),
+        });
+
+        let mut request = fetch_request(server.url("/download"));
+        request.binary = Some(true);
+        request.max_redirects = Some(0);
+        let response = ptd_fetch_with_state(request, &AppState::new())
+            .await
+            .expect("torrent response");
+        assert_eq!(response.status, 302);
+        assert_eq!(response.final_url, server.url("/download"));
+        assert_eq!(
+            STANDARD.decode(response.body).expect("torrent base64"),
+            b"d4:infod4:name4:testee"
+        );
+
+        let response =
+            ptd_fetch_with_state(fetch_request(server.url("/download")), &AppState::new())
+                .await
+                .expect("followed response");
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, "<html>notice</html>");
     }
 
     #[cfg(target_os = "macos")]

@@ -83,6 +83,7 @@ export function sendTorrentToDownloader(
           addTorrentOptions: realAddTorrentOptions as CAddTorrentOptions,
         }).catch((x) => {
           runtimeStore.showSnakebar(`[${torrent.title}] 发送到下载器失败！错误信息： ${x}`, { color: "error" });
+          return { downloadStatus: "failed" as const };
         }),
       );
     }
