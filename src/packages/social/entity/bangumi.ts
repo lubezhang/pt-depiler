@@ -170,7 +170,7 @@ export async function fetchInformation(
     resDict.ratingScore = data.ranking?.score ?? 0;
     resDict.ratingCount = data.ranking?.total ?? 0;
   } catch (error) {
-    console.warn(error);
+    console.warn("[diagnostic] packages/social/entity/bangumi.ts:173");
   } finally {
     resDict.createAt = +Date.now();
   }

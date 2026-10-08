@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 
-import { BackupFields, TBackupFields } from "@/shared/types.ts";
+import { BackupFields, DefaultBackupFields, TBackupFields } from "@/shared/types.ts";
 import { sendMessage } from "@/messages.ts";
 
 const showDialog = defineModel<boolean>();
@@ -15,7 +15,7 @@ async function doLocalExport() {
 }
 
 function dialogEnter() {
-  backupFields.value = [...BackupFields];
+  backupFields.value = [...DefaultBackupFields];
 }
 </script>
 

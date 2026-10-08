@@ -191,7 +191,7 @@ export default class AudioBookBay extends BittorrentSite {
       const nextPageTorrents = await super.transformSearchPage(nextPageDoc.data, searchConfig);
       torrents.push(...nextPageTorrents);
     } catch (e) {
-      console.debug(`[PTD] site '${this.name}' transformSearchPage Error:`, e, torrents);
+      console.debug("[PTD] site '' transformSearchPage Error:");
     }
 
     return torrents;

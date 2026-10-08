@@ -2,6 +2,8 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
 
+use crate::error::AppErrorDto;
+
 /// 启动周期性定时任务，通过 event 通知前端执行业务逻辑。
 /// 替代原扩展 @webext-core/job-scheduler 的 FlushUserInfo（10min）/ AutoBackup（10min 检查）。
 pub fn start_scheduler(app: AppHandle) {
@@ -36,7 +38,7 @@ pub async fn schedule_redownload(
     download_id: String,
     delay_secs: u64,
     app: AppHandle,
-) -> Result<(), String> {
+) -> Result<(), AppErrorDto> {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(delay_secs)).await;

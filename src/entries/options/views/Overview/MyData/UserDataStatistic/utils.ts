@@ -98,9 +98,9 @@ export async function loadFullData(): Promise<IUserDataStatistic> {
   const incrementalData: IUserDataStatistic["incrementalData"] = {};
 
   console.debug(
-    `[PTD] Filtered out ${Object.keys(rawData).length - Object.keys(filteredRawData).length} deleted sites`,
+    "[PTD] Filtered out  deleted sites",
   );
-  console.debug("[PTD] Found UserDataStatistic used date ranges:", datesInRange);
+  console.debug("[PTD] Found UserDataStatistic used date ranges:");
 
   // 遍历过滤后的站点数据
   for (const [siteId, perSiteUserInfoHistory] of Object.entries(filteredRawData)) {
@@ -144,7 +144,7 @@ export async function loadFullData(): Promise<IUserDataStatistic> {
       }
     }
 
-    console.debug(`[PTD] UserDataStatistic for ${siteId} loaded, date range: ${thisSiteDateRangeInInterval}`);
+    console.debug("[PTD] UserDataStatistic for  loaded, date range: ");
   }
 
   console.debug("[PTD] Incremental data calculated during data loading");

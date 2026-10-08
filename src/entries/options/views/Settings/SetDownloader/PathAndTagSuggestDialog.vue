@@ -5,6 +5,8 @@ import { getDownloader, getDownloaderMetaData, type TorrentClientMetaData } from
 
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { cloneDeep } from "es-toolkit";
+import { commitSettings } from "@/options/stores/persistenceFeedback.ts";
 import type { IDownloaderMetadata } from "@/shared/types.ts";
 
 const showDialog = defineModel<boolean>();
@@ -39,9 +41,9 @@ const pathReplaceMap: [string, string, string][] = [
 watch(
   () => clientId,
   async (newValue) => {
-    console.log("Edit clientId:", newValue);
+    console.log("Edit clientId:");
     if (newValue) {
-      clientConfig.value = { suggestFolders: [], suggestTags: [], ...metadataStore.downloaders[newValue] }; // 防止直接修改父组件的数据
+      clientConfig.value = cloneDeep({ suggestFolders: [], suggestTags: [], ...metadataStore.downloaders[newValue] });
       clientMetadata.value = await getDownloaderMetaData(clientConfig.value.type);
     }
   },
@@ -102,9 +104,9 @@ async function loadClientLabels() {
   isLoadingClientLabels.value = false;
 }
 
-function saveClientConfig() {
-  metadataStore.addDownloader(clientConfig.value as IDownloaderMetadata);
-  showDialog.value = false;
+async function saveClientConfig() {
+  if (await commitSettings(() => metadataStore.addDownloader(clientConfig.value as IDownloaderMetadata)))
+    showDialog.value = false;
 }
 </script>
 

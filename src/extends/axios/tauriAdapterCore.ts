@@ -7,22 +7,30 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 
-export type FetchBody = { kind: "none" } | { kind: "text"; data: string } | { kind: "base64"; data: string };
-
-export interface FetchResponse {
-  status: number;
-  headers: Record<string, string>;
-  body: string;
-  finalUrl: string;
-}
+export type { FetchBody, FetchResponse } from "~/generated/ipc.ts";
+import type { FetchBody, FetchResponse } from "~/generated/ipc.ts";
 
 export function toAxiosTransportError(error: unknown, config: InternalAxiosRequestConfig): AxiosError {
-  const message = String(error);
-  if (message.includes("请求已取消")) {
-    return new CanceledError(message, config);
+  const code = error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : undefined;
+  if (code === "HTTP_REQUEST_CANCELLED" || (typeof error === "string" && error.startsWith("请求已取消"))) {
+    return new CanceledError("请求已取消", config);
   }
-  const code = message.includes("请求超时") ? AxiosError.ECONNABORTED : AxiosError.ERR_NETWORK;
-  return new AxiosError(message, code, config);
+  if (code === "HTTP_TIMEOUT" || (typeof error === "string" && error.startsWith("请求超时"))) {
+    return new AxiosError("请求超时", AxiosError.ECONNABORTED, config);
+  }
+  const message =
+    code === "HTTP_POLICY_REJECTED"
+      ? "请求被网络策略拒绝"
+      : code === "HTTP_RESPONSE_TOO_LARGE"
+        ? "响应超过大小限制"
+        : "网络请求失败";
+  return Object.assign(new AxiosError(message, AxiosError.ERR_NETWORK, config), {
+    ipcCode: typeof code === "string" ? code : "INFRASTRUCTURE_FAILURE",
+    operationId:
+      error && typeof error === "object" && "operationId" in error
+        ? (error as { operationId: unknown }).operationId
+        : undefined,
+  });
 }
 
 export async function withCancellation<T>(

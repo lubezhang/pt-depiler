@@ -3,6 +3,8 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { cloneDeep } from "es-toolkit";
+import { commitSettings } from "@/options/stores/persistenceFeedback.ts";
 import type { IDownloaderMetadata, TDownloaderKey } from "@/shared/types.ts";
 
 import SiteFavicon from "@/options/components/SiteFavicon/Index.vue";
@@ -29,14 +31,16 @@ const allSiteIds = computed(() => addedSites.value.map((s) => s.id));
 
 function onEnter() {
   if (clientId) {
-    clientConfig.value = { excludedSites: [], ...metadataStore.downloaders[clientId] };
+    clientConfig.value = cloneDeep({ excludedSites: [], ...metadataStore.downloaders[clientId] });
     excludedSites.value = [...(clientConfig.value.excludedSites ?? [])];
   }
 }
 
-function save() {
-  metadataStore.simplePatch("downloaders", clientId, "excludedSites", excludedSites.value);
-  showDialog.value = false;
+async function save() {
+  if (
+    await commitSettings(() => metadataStore.simplePatch("downloaders", clientId, "excludedSites", excludedSites.value))
+  )
+    showDialog.value = false;
 }
 </script>
 

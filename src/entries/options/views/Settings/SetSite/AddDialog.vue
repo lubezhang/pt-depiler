@@ -4,6 +4,8 @@ import { useI18n } from "vue-i18n";
 import { ISiteMetadata, type ISiteUserConfig, type TSiteID } from "@ptd/site";
 
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { useRuntimeStore } from "@/options/stores/runtime.ts";
+import { isStorageConflict } from "~/extends/pinia/webExtPersistence.ts";
 import { getCanAddedSiteMetadata } from "./utils.ts";
 
 import SiteFavicon from "@/options/components/SiteFavicon/Index.vue";
@@ -15,6 +17,7 @@ const showDialog = defineModel<boolean>();
 
 const { t } = useI18n();
 const metadataStore = useMetadataStore();
+const runtimeStore = useRuntimeStore();
 
 const currentStep = ref<0 | 1>(0);
 const selectedSiteId = ref<TSiteID | null>(null);
@@ -42,8 +45,14 @@ async function loadCanAddSites() {
 }
 
 async function saveSite() {
-  await metadataStore.addSite(selectedSiteId.value!, storedSiteUserConfig.value!);
-  showDialog.value = false;
+  try {
+    await metadataStore.addSite(selectedSiteId.value!, storedSiteUserConfig.value!);
+    showDialog.value = false;
+  } catch (error) {
+    runtimeStore.showSnakebar(t(isStorageConflict(error) ? "common.saveConflict" : "common.saveFailure"), {
+      color: "error",
+    });
+  }
 }
 </script>
 

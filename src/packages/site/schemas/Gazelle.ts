@@ -390,6 +390,12 @@ export class GazelleBase extends PrivateSite {
 
   protected getTorrentDownloadLinkFactory(torrentIdParam: string): (torrent: ITorrent) => Promise<string> {
     return async (torrent: ITorrent): Promise<string> => {
+      if (torrent.requiresFreshLink && torrent.id && /^\d+$/.test(String(torrent.id))) {
+        const downloadURL = new URL("torrent.php", this.url);
+        downloadURL.searchParams.set("action", "download");
+        downloadURL.searchParams.set("id", String(torrent.id));
+        return downloadURL.toString();
+      }
       const raw = await super.getTorrentDownloadLink(torrent);
       const url = URL.parse(raw);
       if (!url) return raw;
@@ -600,7 +606,7 @@ export default class Gazelle extends GazelleBase {
         )) as ITorrent;
         torrents.push(torrent);
       } catch (e) {
-        console.debug(`[PTD] site '${this.name}' parseWholeTorrentFromRow Error:`, e, groupTorrentEl);
+        console.debug("[PTD] site '' parseWholeTorrentFromRow Error:");
       }
     }
 
@@ -628,7 +634,7 @@ export default class Gazelle extends GazelleBase {
       const torrent = (await this.parseWholeTorrentFromRow({ link }, torrentEl, searchConfig)) as ITorrent;
       return torrent;
     } catch (e) {
-      console.debug(`[PTD] site '${this.name}' parseWholeTorrentFromRow Error:`, e, torrentEl);
+      console.debug("[PTD] site '' parseWholeTorrentFromRow Error:");
     }
     return null;
   }

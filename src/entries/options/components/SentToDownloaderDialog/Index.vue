@@ -64,6 +64,7 @@ const downloaderTitle = (downloader: IDownloaderMetadata) => `${downloader.name}
 const getDownloaderIcon = (x: string) => getDownloaderIconRaw(x);
 
 function restoreAddTorrentOptions(downloader?: IDownloaderMetadata) {
+  downloader = downloader?.id ? metadataStore.downloaders[downloader.id] : undefined;
   addTorrentOptions.value.localDownload = true;
   addTorrentOptions.value.addAtPaused = !(downloader?.feature?.DefaultAutoStart ?? true);
   addTorrentOptions.value.savePath = "";
@@ -104,6 +105,7 @@ async function sendToDownloader() {
 }
 
 function quickSendToDownloader(downloader: IDownloaderMetadata, path: string = "", label?: string) {
+  downloader = metadataStore.downloaders[downloader.id];
   selectedDownloader.value = downloader;
 
   // 设置下载推送选项

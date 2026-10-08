@@ -44,7 +44,7 @@ function updateFormValid(v: boolean) {
 }
 
 async function initSiteData(siteId: TSiteID, flush = false) {
-  console.debug("initSiteData", siteId, flush);
+  console.debug("initSiteData");
   siteMetaData.value = await metadataStore.getSiteMetadata(siteId);
   siteUserConfig.value = toMerged(
     { inputSetting: {}, url: siteMetaData.value.urls[0] },

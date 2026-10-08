@@ -87,7 +87,7 @@ async function fetchTmdbExternalIds(docUrl: string): Promise<{ imdb?: string; tv
 
     return { ...(imdb && { imdb }), ...(tvdb && { tvdb }) };
   } catch (error) {
-    console.warn("Failed to fetch TMDb external ids page", error);
+    console.warn("Failed to fetch TMDb external ids page");
     return {};
   }
 }
@@ -105,7 +105,7 @@ async function fetchTmdbSeriesOgTitleFromSeasons(docUrl: string): Promise<string
     });
     return seasonsDoc.querySelector('meta[property="og:title"]')?.getAttribute("content")?.trim() || undefined;
   } catch (error) {
-    console.warn("Failed to fetch TMDb seasons page", error);
+    console.warn("Failed to fetch TMDb seasons page");
     return undefined;
   }
 }
@@ -127,7 +127,7 @@ async function fetchTmdbBaseTitles(docUrl: string): Promise<{ displayTitle?: str
 
     return { displayTitle, originalTitle };
   } catch (error) {
-    console.warn("Failed to fetch TMDb base page", error);
+    console.warn("Failed to fetch TMDb base page");
     return {};
   }
 }
@@ -288,7 +288,7 @@ export async function fetchInformation(
     resDict.ratingScore = ldJson.aggregateRating?.ratingValue ?? 0;
     resDict.ratingCount = ldJson.aggregateRating?.ratingCount ?? 0;
   } catch (error) {
-    console.warn(error);
+    console.warn("[diagnostic] packages/social/entity/tmdb.ts:291");
   } finally {
     resDict.createAt = +Date.now();
   }

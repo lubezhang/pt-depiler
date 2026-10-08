@@ -63,7 +63,7 @@ async function loadBackupHistory() {
   try {
     backupHistory.value = await sendMessage("getBackupHistory", backupServerId);
   } catch (e) {
-    console.error("获取备份历史失败", e);
+    console.error("获取备份历史失败");
   } finally {
     isLoading.value = false;
   }

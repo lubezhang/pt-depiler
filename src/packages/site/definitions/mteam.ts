@@ -706,7 +706,7 @@ export default class MTeam extends PrivateSite {
       }
     } catch (error) {
       // 如果查询历史失败，不影响基础的种子列表返回
-      console.warn(`[MTeam] Failed to query torrent history:`, error);
+      console.warn("[MTeam] Failed to query torrent history:");
     }
 
     return torrents;

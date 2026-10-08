@@ -1,16 +1,10 @@
 import type { ICookie, ICookieInput, TCookieSameSite } from "@/shared/types.ts";
+import type { CookieInfo as IpcCookieInfo } from "~/generated/ipc.ts";
 
-export interface CookieInfo {
-  name: string;
-  value: string;
-  domain: string;
-  hostOnly: boolean;
-  path: string;
-  secure: boolean;
-  httpOnly: boolean;
-  expirationDate?: number;
-  sameSite?: string;
-}
+export type CookieInfo = Omit<IpcCookieInfo, "expirationDate" | "sameSite"> & {
+  expirationDate?: number | null;
+  sameSite?: string | null;
+};
 
 export function buildCookieUrl(secure: boolean, domain: string, path: string): string {
   return `http${secure ? "s" : ""}://${domain.replace(/^\./, "")}${path}`;
@@ -48,13 +42,13 @@ export function toAppCookie(cookie: CookieInfo): ICookie {
     secure: cookie.secure,
     httpOnly: cookie.httpOnly,
     session: cookie.expirationDate == null,
-    expirationDate: cookie.expirationDate,
-    sameSite: mapSameSiteToApp(cookie.sameSite),
+    expirationDate: cookie.expirationDate ?? undefined,
+    sameSite: mapSameSiteToApp(cookie.sameSite ?? undefined),
     storeId: "0",
   };
 }
 
-export function toCookieInfo(cookie: ICookieInput): CookieInfo {
+export function toCookieInfo(cookie: ICookieInput): IpcCookieInfo {
   let urlDomain: string | undefined;
   if (cookie.url) {
     try {
@@ -76,7 +70,7 @@ export function toCookieInfo(cookie: ICookieInput): CookieInfo {
     path: cookie.path ?? "/",
     secure: cookie.secure ?? false,
     httpOnly: cookie.httpOnly ?? false,
-    expirationDate: cookie.expirationDate,
-    sameSite: mapSameSiteToRust(cookie.sameSite as string | undefined),
+    expirationDate: cookie.expirationDate ?? null,
+    sameSite: mapSameSiteToRust(cookie.sameSite as string | undefined) ?? null,
   };
 }

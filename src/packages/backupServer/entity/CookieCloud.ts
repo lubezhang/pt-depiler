@@ -117,7 +117,7 @@ export default class CookieCloud extends AbstractBackupServer<CookieCloudConfig>
       const pingResp = await this.request<string>("", { responseType: "text" });
       return pingResp.data?.includes("Hello World!API ROOT =") || false;
     } catch (e) {
-      console?.warn(e);
+      console?.warn("[diagnostic] packages/backupServer/entity/CookieCloud.ts:120");
     }
     return false;
   }

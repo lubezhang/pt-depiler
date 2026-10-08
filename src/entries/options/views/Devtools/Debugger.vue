@@ -83,7 +83,7 @@ async function getPiniaStore(storeName: string) {
 }
 
 const log = async (v: any) => {
-  console.log(await v);
+  console.log("[diagnostic] entries/options/views/Devtools/Debugger.vue:86");
 };
 
 interface resetItem {

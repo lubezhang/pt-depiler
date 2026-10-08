@@ -45,7 +45,7 @@ export function isCloudflareBlocked(response: AxiosResponse): boolean {
       }
     }
   } catch (e) {
-    console.error("[CFBlockCheck] An error occurred while checking CF block status:", e);
+    console.error("[CFBlockCheck] An error occurred while checking CF block status:");
   }
 
   return false;

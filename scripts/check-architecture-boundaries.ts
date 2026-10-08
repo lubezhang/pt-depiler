@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { relative, resolve, sep } from "node:path";
+import ts from "typescript";
 
 import {
   emptyCatchAllowances,
@@ -87,6 +88,47 @@ export function findArchitectureViolations(root = process.cwd()): ArchitectureVi
     const projectPath = toProjectPath(root, file);
     const source = readFileSync(file, "utf8");
     const imports = importSpecifiers(source);
+    for (const imported of imports) {
+      if (imported.specifier === "@tauri-apps/api/core" && projectPath !== "src/extends/tauri/ipc.ts") {
+        violations.push({
+          file: projectPath,
+          line: lineAt(source, imported.index),
+          message: "业务 IPC 必须经过 invokeIpc",
+          rule: "typed-ipc",
+        });
+      }
+      if (imported.specifier === "@tauri-apps/plugin-store") {
+        violations.push({
+          file: projectPath,
+          line: lineAt(source, imported.index),
+          message: "禁止绕过条件提交直接覆写存储",
+          rule: "conditional-storage",
+        });
+      }
+    }
+    const script = projectPath.endsWith(".vue")
+      ? (/<script\b[^>]*>([\s\S]*?)<\/script>/.exec(source)?.[1] ?? "")
+      : source;
+    const tree = ts.createSourceFile(projectPath, script, ts.ScriptTarget.Latest, true);
+    const checkCall = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "invokeIpc" &&
+        projectPath !== "src/entries/storage.ts" &&
+        ts.isStringLiteral(node.arguments[0]) &&
+        ["set_ext_storage", "merge_ext_storage", "merge_ext_storage_batch"].includes(node.arguments[0].text)
+      ) {
+        violations.push({
+          file: projectPath,
+          line: tree.getLineAndCharacterOfPosition(node.getStart(tree)).line + 1,
+          message: "配置写入必须经过 extStorage 条件提交入口",
+          rule: "conditional-storage",
+        });
+      }
+      ts.forEachChild(node, checkCall);
+    };
+    checkCall(tree);
 
     if (projectPath.startsWith("src/domain/") || projectPath.startsWith("src/packages/domain/")) {
       for (const imported of imports) {

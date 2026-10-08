@@ -16,13 +16,12 @@ afterEach(() => {
 });
 
 describe("服务启动修复", () => {
-  it("存储修复 rejected 时由启动入口输出诊断且不产生未处理拒绝", async () => {
+  it("存储修复失败时阻断启动且不输出原始异常", async () => {
     const error = new Error("user info storage unavailable");
     mocks.fixAllStoredUserInfo.mockRejectedValue(error);
 
-    expect(() => startStoredUserInfoRepair()).not.toThrow();
-    await Promise.resolve();
+    await expect(startStoredUserInfoRepair()).rejects.toBe(error);
 
-    expect(console.error).toHaveBeenCalledWith("[startup] Failed to repair stored user information", error);
+    expect(console.error).not.toHaveBeenCalled();
   });
 });

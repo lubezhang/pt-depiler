@@ -1,9 +1,9 @@
-import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { saveAs } from "file-saver";
 
 import { onMessage } from "@/messages.ts";
 import { extStorage } from "@/storage.ts";
+import { invokeIpc } from "~/extends/tauri/ipc.ts";
 
 /**
  * - blob:/data: URL 是前端创建的，Rust 无法访问，直接用 file-saver 保存；
@@ -23,8 +23,8 @@ onMessage("downloadFile", async ({ data: downloadOptions }) => {
   if (!savePath) {
     return;
   }
-  await invoke("download_to_local", {
-    req: { url, savePath, headers, timeout: 60_000 },
+  await invokeIpc("download_to_local", {
+    req: { url, savePath, headers: headers ?? null, timeout: 60_000 },
   });
 });
 

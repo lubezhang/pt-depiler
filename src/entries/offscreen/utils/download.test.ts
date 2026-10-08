@@ -100,8 +100,8 @@ describe("下载失败边界", () => {
     ).resolves.toMatchObject({ downloadStatus: "completed" });
     expect(mocks.history.get(1)).toMatchObject({
       downloadStatus: "completed",
-      torrent: { title: "Test torrent", tags: [{ name: "Free" }] },
-      addTorrentOptions: { advanceAddTorrentOptions: { sequentialDownload: true } },
+      torrent: { title: "Test torrent", requiresFreshLink: true },
+      addTorrentOptions: { localDownload: true },
     });
     expect(addTorrent).toHaveBeenCalledWith("https://tracker.test/a", expect.any(Object));
   });
@@ -163,8 +163,11 @@ describe("下载失败边界", () => {
           addTorrentOptions: {},
         },
       }),
-    ).resolves.toMatchObject({ downloadStatus: "failed", errorMessage: "torrent fetch failed" });
-    expect(mocks.history.get(6)).toMatchObject({ downloadStatus: "failed", errorMessage: "torrent fetch failed" });
+    ).resolves.toMatchObject({ downloadStatus: "failed", errorMessage: "下载失败，请检查站点和下载器后重试" });
+    expect(mocks.history.get(6)).toMatchObject({
+      downloadStatus: "failed",
+      errorMessage: "下载失败，请重新获取种子后重试",
+    });
   });
 
   it("非零短延迟调度不会阻塞原下载调用", async () => {
@@ -280,7 +283,7 @@ describe("下载失败边界", () => {
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:fixture");
   });
 
-  it("远端下载诊断写入先完成，最终状态保留 completed 与下载器响应", async () => {
+  it("等待最终状态落盘且不保存下载器响应原文", async () => {
     const addTorrentResult = { success: true, id: "remote-task" };
     mocks.history.set(5, { id: 5, downloadStatus: "pending" });
     mocks.getDownloader.mockResolvedValue({ addTorrent: vi.fn().mockResolvedValue(addTorrentResult) });
@@ -297,7 +300,7 @@ describe("下载失败边界", () => {
     });
     const writes: Record<string, unknown>[] = [];
     mocks.put.mockImplementation((_: string, value: Record<string, unknown>) => {
-      if ("addTorrentResult" in value) {
+      if (value.downloadStatus === "completed") {
         return diagnosticWrite.then(() => {
           mocks.history.set(value.id as number, value);
           writes.push(value);
@@ -328,6 +331,7 @@ describe("下载失败边界", () => {
     releaseDiagnosticWrite();
 
     await expect(request).resolves.toMatchObject({ downloadStatus: "completed" });
-    expect(mocks.history.get(5)).toMatchObject({ downloadStatus: "completed", addTorrentResult });
+    expect(mocks.history.get(5)).toMatchObject({ downloadStatus: "completed" });
+    expect(mocks.history.get(5)).not.toHaveProperty("addTorrentResult");
   });
 });

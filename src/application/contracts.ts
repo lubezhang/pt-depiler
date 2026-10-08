@@ -1,9 +1,5 @@
-export type ErrorCode =
-  | "APP_BOOTSTRAP_FAILED"
-  | "COMMAND_HANDLER_MISSING"
-  | "COMMAND_SERIALIZATION_INVALID"
-  | "INFRASTRUCTURE_FAILURE"
-  | "VALIDATION_FAILED";
+import type { AppErrorCode } from "~/generated/ipc.ts";
+export type ErrorCode = AppErrorCode;
 
 export interface AppErrorDto {
   code: ErrorCode;
@@ -32,12 +28,29 @@ export function redact(value: unknown): unknown {
 }
 
 export function toAppError(error: unknown, fallback: ErrorCode = "INFRASTRUCTURE_FAILURE"): AppErrorDto {
-  if (isAppError(error)) return error;
-  return { code: fallback, message: error instanceof Error ? error.message : String(error) };
+  if (isAppError(error)) {
+    const result: AppErrorDto = { code: error.code, message: errorMessages[error.code] };
+    for (const key of ["operationId", "resourceId", "taskId"] as const) {
+      const value = error[key];
+      if (typeof value === "string" && /^[A-Za-z0-9_.:-]{1,160}$/.test(value)) result[key] = value;
+    }
+    return result;
+  }
+  return { code: fallback, message: "操作失败" };
 }
 
+const errorMessages: Record<ErrorCode, string> = {
+  APP_BOOTSTRAP_FAILED: "应用启动失败", COMMAND_HANDLER_MISSING: "操作暂不可用",
+  COMMAND_SERIALIZATION_INVALID: "操作参数无效", INFRASTRUCTURE_FAILURE: "操作失败",
+  VALIDATION_FAILED: "操作参数无效", STORAGE_CONFLICT: "配置已被修改，请重读后重试",
+  STORAGE_UNAVAILABLE: "存储暂不可用", HTTP_POLICY_REJECTED: "请求被网络策略拒绝",
+  HTTP_RESPONSE_TOO_LARGE: "响应超过大小限制", HTTP_REQUEST_CANCELLED: "请求已取消",
+  HTTP_TIMEOUT: "请求超时", FILE_DOWNLOAD_FAILED: "文件下载失败", IPC_INVALID_INPUT: "操作参数无效",
+};
+
 function isAppError(error: unknown): error is AppErrorDto {
-  return Boolean(error && typeof error === "object" && "code" in error && "message" in error);
+  return Boolean(error && typeof error === "object" && "code" in error &&
+    typeof error.code === "string" && Object.hasOwn(errorMessages, error.code));
 }
 
 export function createLogRecord(error: unknown, context: Omit<LogRecord, "code" | "message" | "timestamp">): LogRecord {

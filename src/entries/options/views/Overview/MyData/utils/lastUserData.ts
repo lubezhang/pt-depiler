@@ -70,7 +70,7 @@ export async function initTableData() {
     const siteUserInfoData = metadataStore.lastUserInfo[siteId] ?? {};
     tasks.push(
       updatePerSiteData(siteId as TSiteID, siteUserInfoData).catch((e) => {
-        console.error(`initTableData: updatePerSiteData failed for ${siteId}`, e);
+        console.error("initTableData: updatePerSiteData failed for ");
       }),
     );
   }
@@ -89,7 +89,7 @@ export function flushSiteLastUserInfo(sites: TSiteID[]) {
         // 首先检查是否还在刷新，如果没有，则说明队列已经取消了，此时不报错
         if (!runtimeStore.userInfo.flushPlan[site]) {
           runtimeStore.showSnakebar(`获取站点 [${site}] 用户信息失败`, { color: "error" });
-          console.error(e);
+          console.error("[diagnostic] entries/options/views/Overview/MyData/utils/lastUserData.ts:92");
         }
       })
       .finally(() => {

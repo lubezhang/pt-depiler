@@ -95,7 +95,7 @@ export default class Gist extends AbstractBackupServer<GistConfig> {
       const pingReq = await this.request<{ url?: string }>("");
       return typeof pingReq.data?.url === "string";
     } catch (e) {
-      console?.warn(e);
+      console?.warn("[diagnostic] packages/backupServer/entity/Gist.ts:98");
     }
     return false;
   }

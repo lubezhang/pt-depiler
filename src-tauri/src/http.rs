@@ -16,10 +16,12 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, Webvi
 use tempfile::NamedTempFile;
 #[cfg(target_os = "macos")]
 use tokio::process::Command;
+use ts_rs::TS;
 use url::Url;
 
 use crate::{
-    http_policy::{HttpPolicy, HttpResourceRegistration},
+    error::AppErrorDto,
+    http_policy::{resolve_connection, HttpPolicy},
     state::AppState,
 };
 
@@ -27,6 +29,7 @@ const HTTP_DEBUG_LOG_FILE: &str = "pt-depiler-http-debug.log";
 const HTTP_DEBUG_LOG_MAX_BYTES: u64 = 1_048_576;
 const SITE_LOGIN_WINDOW_LABEL: &str = "site-login";
 const SITE_LOGIN_CLOSED_EVENT: &str = "site-login://closed";
+const MAX_HTTP_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
 #[cfg(target_os = "macos")]
 const CURL_STDERR_MAX_BYTES: u64 = 4_096;
 
@@ -54,44 +57,26 @@ fn write_http_debug_log(message: impl AsRef<str>) {
     }
 }
 
-#[tauri::command]
 pub fn write_debug_log(message: String) {
     write_http_debug_log(message);
 }
 
 fn redacted_url(value: &str) -> String {
     match Url::parse(value) {
-        Ok(mut url) => {
-            let _ = url.set_username("");
-            let _ = url.set_password(None);
-            url.set_query(None);
-            url.set_fragment(None);
-            url.to_string()
-        }
+        Ok(url) => url.origin().ascii_serialization(),
         Err(_) => "<invalid-url>".to_string(),
     }
 }
 
-fn request_cookie_names(state: &AppState, request_url: &str) -> String {
-    let Ok(url) = Url::parse(request_url) else {
-        return "<invalid-url>".to_string();
-    };
-    let Ok(store) = state.cookie_store.lock() else {
-        return "<unavailable>".to_string();
-    };
-    let mut names: Vec<_> = store
-        .get_request_values(&url)
-        .map(|(name, _)| name.to_string())
-        .collect();
-    names.sort_unstable();
-    names.join(",")
+pub(crate) fn ensure_business_window(window: &WebviewWindow) -> Result<(), String> {
+    ensure_business_window_label(window.label())
 }
 
-fn ensure_business_window(window: &WebviewWindow) -> Result<(), String> {
-    if window.label() == SITE_LOGIN_WINDOW_LABEL {
-        Err("登录窗口无权调用业务命令".to_string())
-    } else {
+fn ensure_business_window_label(label: &str) -> Result<(), String> {
+    if label == "main" {
         Ok(())
+    } else {
+        Err("登录窗口无权调用业务命令".to_string())
     }
 }
 
@@ -103,41 +88,38 @@ fn ensure_business_window(window: &WebviewWindow) -> Result<(), String> {
 /// - binary 模式下 body 以 base64 返回，支持种子文件等二进制内容（arraybuffer/blob responseType）
 ///
 /// site_id 字段保留兼容前端的 tauriAdapter，Rust 侧用全局 cookie store 不再按 site_id 隔离。
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct FetchRequest {
+    #[ts(optional)]
     pub request_id: Option<String>,
     pub site_id: String,
-    /// The requesting adapter declares its resource identity with the request.
-    /// The platform validates it before opening a network connection.
-    pub resource_endpoint: Option<String>,
-    pub resource_kind: Option<crate::http_policy::ResourceKind>,
     pub url: String,
+    #[ts(optional)]
     pub method: Option<String>,
+    #[ts(optional)]
     pub headers: Option<HashMap<String, String>>,
     pub body: FetchBody,
     #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[ts(optional)]
     pub params: Option<HashMap<String, String>>,
     /// 单次请求超时（毫秒），默认 30s
+    #[ts(optional, type = "number")]
     pub timeout: Option<u64>,
     /// Cloudflare 拦截重试次数，默认 3
+    #[ts(optional)]
     pub max_retries: Option<u32>,
     /// 是否以二进制方式返回 body（base64 编码），用于种子文件等
+    #[ts(optional)]
     pub binary: Option<bool>,
     /// Axios-compatible redirect limit. `0` preserves the original response,
     /// which is required by sites that put a torrent body on a 302 response.
+    #[ts(optional)]
     pub max_redirects: Option<usize>,
 }
 
-#[tauri::command]
-pub fn register_http_resource(
-    registration: HttpResourceRegistration,
-    policy: State<'_, HttpPolicy>,
-) -> Result<(), String> {
-    policy.register(registration)
-}
-
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, TS)]
 #[serde(tag = "kind", content = "data", rename_all = "camelCase")]
 pub enum FetchBody {
     None,
@@ -165,7 +147,7 @@ impl FetchBody {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct FetchResponse {
     pub status: u16,
@@ -174,6 +156,7 @@ pub struct FetchResponse {
     pub final_url: String,
 }
 
+#[derive(Debug)]
 struct RawHttpResponse {
     status: u16,
     http_version: String,
@@ -182,17 +165,41 @@ struct RawHttpResponse {
     final_url: String,
 }
 
-fn format_reqwest_error(mut error: reqwest::Error) -> String {
-    if let Some(url) = error.url_mut() {
-        let _ = url.set_username("");
-        let _ = url.set_password(None);
-        url.set_query(None);
-        url.set_fragment(None);
+type Authorization<'a> = Option<&'a (dyn Fn(&Method, &str) -> Result<bool, String> + Send + Sync)>;
+
+fn redirect_target(current: &Url, first: &Url, status: u16, location: &str) -> Result<Url, String> {
+    let next = current
+        .join(location)
+        .map_err(|_| "HTTP_POLICY_REJECTED:invalid_redirect")?;
+    if next.origin() != first.origin() {
+        return Err("HTTP_POLICY_REJECTED:cross_origin_redirect".to_string());
     }
+    if !matches!(status, 301 | 302 | 303 | 307 | 308) {
+        return Err("HTTP_POLICY_REJECTED:invalid_redirect".to_string());
+    }
+    Ok(next)
+}
+
+fn advance_redirect_method(current: &mut FetchRequest, method: &mut Method, status: u16) {
+    if status == 303 && *method != Method::HEAD
+        || matches!(status, 301 | 302) && *method == Method::POST
+    {
+        *method = Method::GET;
+        current.body = FetchBody::None;
+        if let Some(headers) = &mut current.headers {
+            headers.retain(|name, _| {
+                !name.eq_ignore_ascii_case("content-type")
+                    && !name.eq_ignore_ascii_case("content-length")
+            });
+        }
+    }
+}
+
+fn format_reqwest_error(error: reqwest::Error) -> String {
     if error.is_timeout() {
-        format!("请求超时: {error}")
+        "请求超时".to_string()
     } else {
-        error.to_string()
+        "HTTP_TRANSPORT_FAILURE".to_string()
     }
 }
 
@@ -201,49 +208,98 @@ async fn send_with_reqwest(
     method: &Method,
     timeout: Duration,
     state: &AppState,
+    authorize: Authorization<'_>,
 ) -> Result<RawHttpResponse, String> {
-    let client = if req.max_redirects == Some(0) {
-        &state.no_redirect_client
-    } else {
-        &state.client
-    };
-    let mut builder = client.request(method.clone(), &req.url).timeout(timeout);
-    if let Some(headers) = &req.headers {
-        for (key, value) in headers {
-            builder = builder.header(key, value);
+    let first = Url::parse(&req.url).map_err(|_| "HTTP_POLICY_REJECTED:invalid_url")?;
+    let mut current = req.clone();
+    let mut method = method.clone();
+    let limit = req.max_redirects.unwrap_or(10).min(10);
+    for hop in 0..=limit {
+        let client = if let Some(authorize) = authorize {
+            let require_public = authorize(&method, &current.url)?;
+            let addresses = resolve_connection(&current.url, require_public).await?;
+            let host = Url::parse(&current.url)
+                .map_err(|_| "HTTP_POLICY_REJECTED:invalid_url")?
+                .host_str()
+                .ok_or("HTTP_POLICY_REJECTED:invalid_url")?
+                .to_string();
+            reqwest::Client::builder()
+                .cookie_provider(std::sync::Arc::clone(&state.cookie_store))
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .resolve_to_addrs(&host, &addresses)
+                .build()
+                .map_err(|_| "HTTP_TRANSPORT_FAILURE")?
+        } else {
+            state.no_redirect_client.clone()
+        };
+        let mut builder = client
+            .request(method.clone(), &current.url)
+            .timeout(timeout);
+        if let Some(headers) = &current.headers {
+            for (key, value) in headers {
+                builder = builder.header(key, value);
+            }
         }
-    }
-    if let Some(params) = &req.params {
-        builder = builder.query(params);
-    }
-    if let Some(body) = req.body.bytes()? {
-        builder = builder.body(body);
-    }
+        if let Some(params) = &current.params {
+            builder = builder.query(params);
+        }
+        if let Some(body) = current.body.bytes()? {
+            builder = builder.body(body);
+        }
 
-    let response = builder.send().await.map_err(format_reqwest_error)?;
-    let status = response.status().as_u16();
-    let http_version = format!("{:?}", response.version());
-    let final_url = response.url().to_string();
-    let mut headers = HashMap::new();
-    for (key, value) in response.headers() {
-        headers.insert(
-            key.as_str().to_string(),
-            value.to_str().unwrap_or("").to_string(),
-        );
+        let mut response = builder.send().await.map_err(format_reqwest_error)?;
+        let status = response.status().as_u16();
+        if matches!(status, 301 | 302 | 303 | 307 | 308) && limit > 0 {
+            if let Some(location) = response.headers().get(reqwest::header::LOCATION) {
+                if hop == limit {
+                    return Err("HTTP_POLICY_REJECTED:redirect_limit".to_string());
+                }
+                let next = redirect_target(
+                    response.url(),
+                    &first,
+                    status,
+                    location
+                        .to_str()
+                        .map_err(|_| "HTTP_POLICY_REJECTED:invalid_redirect")?,
+                )?;
+                advance_redirect_method(&mut current, &mut method, status);
+                current.url = next.to_string();
+                current.params = None;
+                continue;
+            }
+        }
+        let http_version = format!("{:?}", response.version());
+        let final_url = response.url().to_string();
+        let mut headers = HashMap::new();
+        for (key, value) in response.headers() {
+            headers.insert(
+                key.as_str().to_string(),
+                value.to_str().unwrap_or("").to_string(),
+            );
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_HTTP_RESPONSE_BYTES as u64)
+        {
+            return Err("HTTP_RESPONSE_TOO_LARGE".to_string());
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(format_reqwest_error)? {
+            if body.len().saturating_add(chunk.len()) > MAX_HTTP_RESPONSE_BYTES {
+                return Err("HTTP_RESPONSE_TOO_LARGE".to_string());
+            }
+            body.extend_from_slice(&chunk);
+        }
+        return Ok(RawHttpResponse {
+            status,
+            http_version,
+            headers,
+            body,
+            final_url,
+        });
     }
-    let body = response
-        .bytes()
-        .await
-        .map_err(format_reqwest_error)?
-        .to_vec();
-
-    Ok(RawHttpResponse {
-        status,
-        http_version,
-        headers,
-        body,
-        final_url,
-    })
+    Err("HTTP_POLICY_REJECTED:redirect_limit".to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -467,11 +523,12 @@ async fn command_output_with_limited_stderr(
 }
 
 #[cfg(target_os = "macos")]
-async fn send_with_curl(
+async fn send_with_curl_once(
     req: &FetchRequest,
     method: &Method,
     timeout: Duration,
     state: &AppState,
+    resolved: Option<&[std::net::SocketAddr]>,
 ) -> Result<RawHttpResponse, String> {
     let headers_file = NamedTempFile::new().map_err(|error| error.to_string())?;
     let response_body_file = NamedTempFile::new().map_err(|error| error.to_string())?;
@@ -500,18 +557,21 @@ async fn send_with_curl(
     // system networking context. Direct child processes receive Cloudflare 400
     // responses on this machine while the user-domain process succeeds.
     let user_id = unsafe { libc::geteuid() }.to_string();
+    let max_size = MAX_HTTP_RESPONSE_BYTES.to_string();
     let mut command = Command::new("/bin/launchctl");
     command
         .arg("asuser")
         .arg(user_id)
         .arg("/usr/bin/curl")
         .args([
+            "-q",
+            "--noproxy",
+            "*",
             "--silent",
             "--show-error",
-            "--location",
-            "--max-redirs",
-            "10",
             "--compressed",
+            "--max-filesize",
+            &max_size,
             "--max-time",
             &timeout_seconds,
             "--dump-header",
@@ -527,6 +587,22 @@ async fn send_with_curl(
         .arg("%{http_code}\n%{url_effective}")
         .arg("--url")
         .arg(&req.url);
+    if let Some(addresses) = resolved {
+        let url = Url::parse(&req.url).map_err(|_| "HTTP_POLICY_REJECTED:invalid_url")?;
+        let host = url.host_str().ok_or("HTTP_POLICY_REJECTED:invalid_url")?;
+        let port = url
+            .port_or_known_default()
+            .ok_or("HTTP_POLICY_REJECTED:invalid_url")?;
+        let ips = addresses
+            .iter()
+            .map(|address| match address.ip() {
+                std::net::IpAddr::V4(ip) => ip.to_string(),
+                std::net::IpAddr::V6(ip) => format!("[{ip}]"),
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        command.arg("--resolve").arg(format!("{host}:{port}:{ips}"));
+    }
     if *method == Method::HEAD {
         command.arg("--head");
     } else if *method != Method::GET && !(request_has_body && *method == Method::POST) {
@@ -546,15 +622,13 @@ async fn send_with_curl(
     let process_timeout = timeout
         .checked_add(Duration::from_secs(2))
         .unwrap_or(timeout);
-    let (output, stderr) =
+    let (output, _stderr) =
         command_output_with_limited_stderr(&mut command, process_timeout).await?;
     if !output.status.success() {
-        let stderr = stderr.replace(&req.url, &redacted_url(&req.url));
-        return Err(format!(
-            "curl 请求失败（退出码 {:?}）：{}",
-            output.status.code(),
-            stderr.trim()
-        ));
+        if output.status.code() == Some(63) {
+            return Err("HTTP_RESPONSE_TOO_LARGE".to_string());
+        }
+        return Err("HTTP_TRANSPORT_FAILURE".to_string());
     }
 
     let raw_headers =
@@ -564,6 +638,15 @@ async fn send_with_curl(
         std::fs::read_to_string(cookie_file.path()).map_err(|error| error.to_string())?;
     store_curl_cookie_jar(state, &input_cookie_jar, &cookie_jar)?;
     store_curl_response_cookies(state, &raw_headers, &req.url)?;
+    if response_body_file
+        .as_file()
+        .metadata()
+        .map_err(|error| error.to_string())?
+        .len()
+        > MAX_HTTP_RESPONSE_BYTES as u64
+    {
+        return Err("HTTP_RESPONSE_TOO_LARGE".to_string());
+    }
     let body = std::fs::read(response_body_file.path()).map_err(|error| error.to_string())?;
     let output = String::from_utf8_lossy(&output.stdout);
     let final_url = output.lines().nth(1).unwrap_or(&req.url).to_string();
@@ -575,6 +658,63 @@ async fn send_with_curl(
         body,
         final_url,
     })
+}
+
+#[cfg(all(test, target_os = "macos"))]
+async fn send_with_curl(
+    req: &FetchRequest,
+    method: &Method,
+    timeout: Duration,
+    state: &AppState,
+) -> Result<RawHttpResponse, String> {
+    send_with_curl_authorized(req, method, timeout, state, None).await
+}
+
+#[cfg(target_os = "macos")]
+async fn send_with_curl_authorized(
+    req: &FetchRequest,
+    method: &Method,
+    timeout: Duration,
+    state: &AppState,
+    authorize: Authorization<'_>,
+) -> Result<RawHttpResponse, String> {
+    let mut current = req.clone();
+    let mut method = method.clone();
+    let initial = Url::parse(&req.url).map_err(|_| "HTTP_POLICY_REJECTED:invalid_url")?;
+    let limit = req.max_redirects.unwrap_or(10).min(10);
+    for hop in 0..=limit {
+        let resolved = if let Some(authorize) = authorize {
+            let require_public = authorize(&method, &current.url)?;
+            Some(resolve_connection(&current.url, require_public).await?)
+        } else {
+            None
+        };
+        let response =
+            send_with_curl_once(&current, &method, timeout, state, resolved.as_deref()).await?;
+        if !matches!(response.status, 301 | 302 | 303 | 307 | 308) || limit == 0 {
+            return Ok(response);
+        }
+        let Some(location) = response
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("location"))
+            .map(|(_, value)| value)
+        else {
+            return Ok(response);
+        };
+        if hop == limit {
+            return Err("HTTP_POLICY_REJECTED:redirect_limit".to_string());
+        }
+        let next = redirect_target(
+            &Url::parse(&current.url).map_err(|_| "HTTP_POLICY_REJECTED:invalid_url")?,
+            &initial,
+            response.status,
+            location,
+        )?;
+        advance_redirect_method(&mut current, &mut method, response.status);
+        current.url = next.to_string();
+    }
+    Err("HTTP_POLICY_REJECTED:redirect_limit".to_string())
 }
 
 fn is_cloudflare_blocked(status: u16, headers: &HashMap<String, String>, body: &str) -> bool {
@@ -622,25 +762,50 @@ pub async fn ptd_fetch(
     req: FetchRequest,
     state: State<'_, AppState>,
     policy: State<'_, HttpPolicy>,
+    app: AppHandle,
     window: WebviewWindow,
-) -> Result<FetchResponse, String> {
-    ensure_business_window(&window)?;
-    if let (Some(endpoint), Some(kind)) = (req.resource_endpoint.clone(), req.resource_kind) {
-        policy.register(HttpResourceRegistration {
-            resource_id: req.site_id.clone(),
-            endpoint,
-            kind,
-        })?;
+) -> Result<FetchResponse, AppErrorDto> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_OPERATION: AtomicU64 = AtomicU64::new(1);
+    let operation_id = req
+        .request_id
+        .as_ref()
+        .filter(|id| id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+        .cloned()
+        .unwrap_or_else(|| format!("fetch-{}", NEXT_OPERATION.fetch_add(1, Ordering::Relaxed)));
+    let resource_id = (req.site_id.len() <= 160
+        && req
+            .site_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '-' | '_' | '.')))
+    .then(|| req.site_id.clone());
+    let result = async {
+        ensure_business_window(&window)?;
+        let method_name = req.method.as_deref().unwrap_or("GET").to_ascii_uppercase();
+        let method =
+            Method::from_bytes(method_name.as_bytes()).map_err(|error| error.to_string())?;
+        let authorize = |method: &Method, url: &str| {
+            let metadata = crate::storage::read_key(&app, "metadata")
+                .map_err(|_| "HTTP_POLICY_REJECTED:storage_unavailable")?;
+            policy.validate(&metadata, &req.site_id, method, url)?;
+            Ok(policy.requires_public_address(&metadata, &req.site_id, url))
+        };
+        authorize(&method, &req.url)?;
+        ptd_fetch_cancellable(req.clone(), state.inner(), Some(&authorize)).await
     }
-    let method_name = req.method.as_deref().unwrap_or("GET").to_ascii_uppercase();
-    let method = Method::from_bytes(method_name.as_bytes()).map_err(|error| error.to_string())?;
-    policy.validate(&req.site_id, &method, &req.url)?;
-    ptd_fetch_cancellable(req, state.inner()).await
+    .await;
+    result.map_err(|error| AppErrorDto::ipc(&error, operation_id, resource_id))
 }
 
 #[tauri::command]
-pub fn ptd_cancel_fetch(request_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    state.cancel_http_request(&request_id)
+pub fn ptd_cancel_fetch(
+    request_id: String,
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    ensure_business_window(&window)
+        .and_then(|_| state.cancel_http_request(&request_id))
+        .map_err(|error| AppErrorDto::command(&error, "ptd_cancel_fetch"))
 }
 
 async fn with_request_cancellation<T, F>(
@@ -666,19 +831,29 @@ where
 async fn ptd_fetch_cancellable(
     req: FetchRequest,
     state: &AppState,
+    authorize: Authorization<'_>,
 ) -> Result<FetchResponse, String> {
     let request_id = req.request_id.clone();
     with_request_cancellation(
         request_id.as_deref(),
         state,
-        ptd_fetch_with_state(req, state),
+        ptd_fetch_with_state_authorized(req, state, authorize),
     )
     .await
 }
 
+#[cfg(test)]
 async fn ptd_fetch_with_state(
     req: FetchRequest,
     state: &AppState,
+) -> Result<FetchResponse, String> {
+    ptd_fetch_with_state_authorized(req, state, None).await
+}
+
+async fn ptd_fetch_with_state_authorized(
+    req: FetchRequest,
+    state: &AppState,
+    authorize: Authorization<'_>,
 ) -> Result<FetchResponse, String> {
     let method_name = req.method.as_deref().unwrap_or("GET").to_ascii_uppercase();
     let method = Method::from_bytes(method_name.as_bytes()).map_err(|e| e.to_string())?;
@@ -689,31 +864,18 @@ async fn ptd_fetch_with_state(
     let max_retries = req.max_retries.unwrap_or(3);
     let binary = req.binary.unwrap_or(false);
     let request_url = redacted_url(&req.url);
-    let header_names = req
-        .headers
-        .as_ref()
-        .map(|headers| {
-            let mut names: Vec<_> = headers.keys().map(|name| name.as_str()).collect();
-            names.sort_unstable();
-            names.join(",")
-        })
-        .unwrap_or_default();
-    let cookie_names = request_cookie_names(state, &req.url);
-
     write_http_debug_log(format!(
-        "request site_id={} method={} url={} timeout_ms={} body_len={} header_names=[{}] cookie_names=[{}]",
+        "request site_id={} method={} origin={} timeout_ms={} body_len={}",
         req.site_id,
         method,
         request_url,
         timeout.as_millis(),
-        req.body.len(),
-        header_names,
-        cookie_names
+        req.body.len()
     ));
 
     let mut attempt = 0u32;
     loop {
-        let response_result = send_with_reqwest(&req, &method, timeout, state).await;
+        let response_result = send_with_reqwest(&req, &method, timeout, state, authorize).await;
 
         let mut response = match response_result {
             Ok(response) => response,
@@ -731,7 +893,7 @@ async fn ptd_fetch_with_state(
                 "curl_fallback site_id={} method={} url={} reason=cloudflare_400",
                 req.site_id, method, request_url
             ));
-            response = send_with_curl(&req, &method, timeout, state)
+            response = send_with_curl_authorized(&req, &method, timeout, state, authorize)
                 .await
                 .map_err(|error| format!("请求 {request_url} 的 curl 兼容路径失败: {error:#}"))?;
         }
@@ -746,7 +908,7 @@ async fn ptd_fetch_with_state(
             .keys()
             .any(|key| key.eq_ignore_ascii_case("set-cookie"));
         write_http_debug_log(format!(
-            "response site_id={} method={} url={} status={} http_version={} final_url={} body_len={} content_type={} content_encoding={} server={} cf_ray={} via={} has_set_cookie={} attempt={}",
+            "response site_id={} method={} origin={} status={} http_version={} final_origin={} body_len={} has_set_cookie={} attempt={}",
             req.site_id,
             method,
             request_url,
@@ -754,31 +916,6 @@ async fn ptd_fetch_with_state(
             http_version,
             redacted_url(&final_url),
             body_bytes.len(),
-            headers_map
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case("content-type"))
-                .map(|(_, value)| value.as_str())
-                .unwrap_or(""),
-            headers_map
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case("content-encoding"))
-                .map(|(_, value)| value.as_str())
-                .unwrap_or(""),
-            headers_map
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case("server"))
-                .map(|(_, value)| value.as_str())
-                .unwrap_or(""),
-            headers_map
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case("cf-ray"))
-                .map(|(_, value)| value.as_str())
-                .unwrap_or(""),
-            headers_map
-                .iter()
-                .find(|(key, _)| key.eq_ignore_ascii_case("via"))
-                .map(|(_, value)| value.as_str())
-                .unwrap_or(""),
             has_set_cookie,
             attempt
         ));
@@ -816,7 +953,7 @@ async fn ptd_fetch_with_state(
 // ===== cookie 读写命令 =====
 // 操作全局 cookie_store，替代原 chrome.cookies API。供备份/恢复、checkAndExtendCookies 使用。
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CookieInfo {
     pub name: String,
@@ -836,7 +973,7 @@ struct SerializedCookieScope {
     path: CookiePath,
 }
 
-fn cookie_to_info(c: &cookie_store::Cookie) -> Result<CookieInfo, String> {
+pub(crate) fn cookie_to_info(c: &cookie_store::Cookie) -> Result<CookieInfo, String> {
     let scope: SerializedCookieScope =
         serde_json::from_value(serde_json::to_value(c).map_err(|error| error.to_string())?)
             .map_err(|error| error.to_string())?;
@@ -1015,6 +1152,20 @@ pub async fn open_site_login(
     login_url: String,
     app: AppHandle,
     state: State<'_, AppState>,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    ensure_business_window(&window)
+        .map_err(|error| AppErrorDto::command(&error, "open_site_login"))?;
+    open_site_login_inner(site_url, login_url, app, state)
+        .await
+        .map_err(|error| AppErrorDto::command(&error, "open_site_login"))
+}
+
+async fn open_site_login_inner(
+    site_url: String,
+    login_url: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<(), String> {
     let target_url = site_url.clone();
     let site_url = Url::parse(&site_url).map_err(|error| error.to_string())?;
@@ -1074,6 +1225,19 @@ pub async fn finish_site_login(
     site_url: String,
     app: AppHandle,
     state: State<'_, AppState>,
+    caller: WebviewWindow,
+) -> Result<usize, AppErrorDto> {
+    ensure_business_window(&caller)
+        .map_err(|error| AppErrorDto::command(&error, "finish_site_login"))?;
+    finish_site_login_inner(site_url, app, state)
+        .await
+        .map_err(|error| AppErrorDto::command(&error, "finish_site_login"))
+}
+
+async fn finish_site_login_inner(
+    site_url: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<usize, String> {
     let site_url = Url::parse(&site_url).map_err(|error| error.to_string())?;
     let site_host = site_url.host_str().ok_or("站点地址缺少主机名")?;
@@ -1089,6 +1253,25 @@ pub async fn finish_site_login(
 
 #[tauri::command]
 pub async fn get_cookies(
+    domain: Option<String>,
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    app: AppHandle,
+) -> Result<Vec<CookieInfo>, AppErrorDto> {
+    ensure_business_window(&window).map_err(|error| AppErrorDto::command(&error, "get_cookies"))?;
+    let metadata = crate::storage::read_key(&app, "metadata")
+        .map_err(|error| AppErrorDto::command(&error, "get_cookies"))?;
+    let cookies = get_cookies_inner(domain, state)
+        .await
+        .map_err(|error| AppErrorDto::command(&error, "get_cookies"))?;
+    let hosts = crate::storage::site_hosts(Some(&metadata));
+    Ok(cookies
+        .into_iter()
+        .filter(|cookie| cookie_owned_by_sites(cookie, &hosts))
+        .collect())
+}
+
+async fn get_cookies_inner(
     domain: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<CookieInfo>, String> {
@@ -1160,8 +1343,30 @@ fn store_cookie_info(
 }
 
 #[tauri::command]
-pub async fn set_cookie(cookie: CookieInfo, state: State<'_, AppState>) -> Result<(), String> {
-    set_cookie_with_state(cookie, state.inner())
+pub async fn set_cookie(
+    cookie: CookieInfo,
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    app: AppHandle,
+) -> Result<(), AppErrorDto> {
+    let metadata = crate::storage::read_key(&app, "metadata")
+        .map_err(|error| AppErrorDto::command(&error, "set_cookie"))?;
+    if !cookie_owned_by_sites(&cookie, &crate::storage::site_hosts(Some(&metadata))) {
+        return Err(AppErrorDto::command(
+            "HTTP_POLICY_REJECTED:cookie_scope_not_configured",
+            "set_cookie",
+        ));
+    }
+    ensure_business_window(&window)
+        .and_then(|_| set_cookie_with_state(cookie, state.inner()))
+        .map_err(|error| AppErrorDto::command(&error, "set_cookie"))
+}
+
+fn cookie_owned_by_sites(cookie: &CookieInfo, hosts: &[String]) -> bool {
+    let domain = cookie.domain.trim_start_matches('.');
+    hosts
+        .iter()
+        .any(|host| host == domain || !cookie.host_only && domain_matches(domain, host))
 }
 
 fn set_cookie_with_state(cookie: CookieInfo, state: &AppState) -> Result<(), String> {
@@ -1198,6 +1403,13 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn ap_04_only_main_window_can_use_business_commands() {
+        assert!(ensure_business_window_label("main").is_ok());
+        assert!(ensure_business_window_label("site-login").is_err());
+        assert!(ensure_business_window_label("other").is_err());
+    }
 
     struct TestRequest {
         method: String,
@@ -1283,6 +1495,9 @@ mod tests {
             .expect("set test stream timeout");
         let request = read_request(&mut stream);
         let response = handler(request);
+        let chunked = response.headers.iter().any(|(name, value)| {
+            name.eq_ignore_ascii_case("transfer-encoding") && value == "chunked"
+        });
         let reason = match response.status {
             200 => "OK",
             301 => "Moved Permanently",
@@ -1296,15 +1511,36 @@ mod tests {
         for (name, value) in response.headers {
             write!(stream, "{name}: {value}\r\n").expect("write response header");
         }
-        write!(
-            stream,
-            "Content-Length: {}\r\nConnection: close\r\n\r\n",
-            response.body.len()
-        )
-        .expect("write response framing");
-        stream
-            .write_all(&response.body)
-            .expect("write response body");
+        if chunked {
+            write!(stream, "Connection: close\r\n\r\n").expect("write chunked framing");
+        } else {
+            write!(
+                stream,
+                "Content-Length: {}\r\nConnection: close\r\n\r\n",
+                response.body.len()
+            )
+            .expect("write response framing");
+        }
+        let body_result = (|| -> std::io::Result<()> {
+            if chunked {
+                for chunk in response.body.chunks(64 * 1024) {
+                    write!(stream, "{:x}\r\n", chunk.len())?;
+                    stream.write_all(chunk)?;
+                    stream.write_all(b"\r\n")?;
+                }
+                stream.write_all(b"0\r\n\r\n")
+            } else {
+                stream.write_all(&response.body)
+            }
+        })();
+        if let Err(error) = body_result {
+            if !matches!(
+                error.kind(),
+                std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::ConnectionReset
+            ) {
+                panic!("write response body: {error}");
+            }
+        }
         let _ = stream.shutdown(Shutdown::Both);
     }
 
@@ -1357,8 +1593,6 @@ mod tests {
         FetchRequest {
             request_id: None,
             site_id: "test".to_string(),
-            resource_endpoint: None,
-            resource_kind: None,
             url,
             method: None,
             headers: None,
@@ -1371,12 +1605,232 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn ap_05_proxy_environment_cannot_change_transport_route() {
+        if std::env::var_os("PTD_PROXY_FIXTURE_CHILD").is_none() {
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "http::tests::ap_05_proxy_environment_cannot_change_transport_route",
+                    "--nocapture",
+                ])
+                .env("PTD_PROXY_FIXTURE_CHILD", "1")
+                .env("HTTP_PROXY", "http://127.0.0.1:1")
+                .env("HTTPS_PROXY", "http://127.0.0.1:1")
+                .env("ALL_PROXY", "http://127.0.0.1:1")
+                .env("http_proxy", "http://127.0.0.1:1")
+                .env("https_proxy", "http://127.0.0.1:1")
+                .env("all_proxy", "http://127.0.0.1:1")
+                .env("NO_PROXY", "")
+                .env("no_proxy", "")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+        let server = TestServer::spawn(|_| TestResponse::ok(b"direct".to_vec()));
+        let state = AppState::new();
+        let request = fetch_request(server.url("/"));
+        assert_eq!(
+            send_with_reqwest(&request, &Method::GET, Duration::from_secs(5), &state, None)
+                .await
+                .unwrap()
+                .body,
+            b"direct"
+        );
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            send_with_curl(&request, &Method::GET, Duration::from_secs(5), &state)
+                .await
+                .unwrap()
+                .body,
+            b"direct"
+        );
+    }
+
+    #[tokio::test]
+    async fn ap_05_response_limit_agrees_for_reqwest_and_curl() {
+        let server = TestServer::spawn(|request| {
+            let mut response =
+                TestResponse::ok(vec![
+                    b'x';
+                    MAX_HTTP_RESPONSE_BYTES
+                        + usize::from(request.path.ends_with("over"))
+                ]);
+            if request.path.starts_with("/gzip") {
+                let mut encoder =
+                    flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+                encoder.write_all(&response.body).unwrap();
+                response.body = encoder.finish().unwrap();
+                response
+                    .headers
+                    .push(("Content-Encoding".into(), "gzip".into()));
+            }
+            if request.path.starts_with("/chunked") {
+                response
+                    .headers
+                    .push(("Transfer-Encoding".into(), "chunked".into()));
+            }
+            response
+        });
+        let state = AppState::new();
+        for path in [
+            "/exact",
+            "/over",
+            "/chunked-exact",
+            "/chunked-over",
+            "/gzip-exact",
+            "/gzip-over",
+        ] {
+            let req = fetch_request(server.url(path));
+            let result =
+                send_with_reqwest(&req, &Method::GET, Duration::from_secs(10), &state, None).await;
+            if path.ends_with("exact") {
+                assert_eq!(result.unwrap().body.len(), MAX_HTTP_RESPONSE_BYTES);
+            } else {
+                assert_eq!(result.unwrap_err(), "HTTP_RESPONSE_TOO_LARGE");
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let result =
+                    send_with_curl(&req, &Method::GET, Duration::from_secs(10), &state).await;
+                if path.ends_with("exact") {
+                    assert_eq!(result.unwrap().body.len(), MAX_HTTP_RESPONSE_BYTES);
+                } else {
+                    assert_eq!(result.unwrap_err(), "HTTP_RESPONSE_TOO_LARGE");
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn ap_05_reqwest_revalidates_resource_after_redirect() {
+        let deleted = Arc::new(AtomicBool::new(false));
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server = TestServer::spawn({
+            let deleted = Arc::clone(&deleted);
+            let hits = Arc::clone(&hits);
+            move |_| {
+                hits.fetch_add(1, Ordering::SeqCst);
+                deleted.store(true, Ordering::SeqCst);
+                TestResponse {
+                    status: 302,
+                    headers: vec![("Location".to_string(), "/next".to_string())],
+                    body: Vec::new(),
+                }
+            }
+        });
+        let authorize = |_: &Method, _: &str| {
+            if deleted.load(Ordering::SeqCst) {
+                Err("HTTP_POLICY_REJECTED:resource_not_configured".to_string())
+            } else {
+                Ok(false)
+            }
+        };
+        let error = send_with_reqwest(
+            &fetch_request(server.url("/first")),
+            &Method::GET,
+            Duration::from_secs(5),
+            &AppState::new(),
+            Some(&authorize),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error, "HTTP_POLICY_REJECTED:resource_not_configured");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn ap_05_cross_origin_redirect_never_sends_authorization() {
+        let target_hits = Arc::new(AtomicUsize::new(0));
+        let target = TestServer::spawn({
+            let target_hits = Arc::clone(&target_hits);
+            move |_| {
+                target_hits.fetch_add(1, Ordering::SeqCst);
+                TestResponse::ok("unexpected")
+            }
+        });
+        let location = target.url("/target");
+        let source = TestServer::spawn(move |_| TestResponse {
+            status: 302,
+            headers: vec![("Location".to_string(), location.clone())],
+            body: Vec::new(),
+        });
+        let mut request = fetch_request(source.url("/start"));
+        request.headers = Some(HashMap::from([(
+            "Authorization".to_string(),
+            "Bearer sensitive-value".to_string(),
+        )]));
+        let state = AppState::new();
+        assert_eq!(
+            send_with_reqwest(&request, &Method::GET, Duration::from_secs(5), &state, None)
+                .await
+                .unwrap_err(),
+            "HTTP_POLICY_REJECTED:cross_origin_redirect"
+        );
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            send_with_curl(&request, &Method::GET, Duration::from_secs(5), &state)
+                .await
+                .unwrap_err(),
+            "HTTP_POLICY_REJECTED:cross_origin_redirect"
+        );
+        assert_eq!(target_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn ap_05_curl_revalidates_resource_after_redirect() {
+        let deleted = Arc::new(AtomicBool::new(false));
+        let hits = Arc::new(AtomicUsize::new(0));
+        let server = TestServer::spawn({
+            let deleted = Arc::clone(&deleted);
+            let hits = Arc::clone(&hits);
+            move |_| {
+                hits.fetch_add(1, Ordering::SeqCst);
+                deleted.store(true, Ordering::SeqCst);
+                TestResponse {
+                    status: 302,
+                    headers: vec![("Location".to_string(), "/next".to_string())],
+                    body: Vec::new(),
+                }
+            }
+        });
+        let authorize = |_: &Method, _: &str| {
+            if deleted.load(Ordering::SeqCst) {
+                Err("HTTP_POLICY_REJECTED:resource_not_configured".to_string())
+            } else {
+                Ok(false)
+            }
+        };
+        let error = send_with_curl_authorized(
+            &fetch_request(server.url("/first")),
+            &Method::GET,
+            Duration::from_secs(5),
+            &AppState::new(),
+            Some(&authorize),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error, "HTTP_POLICY_REJECTED:resource_not_configured");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
     #[test]
     fn redacts_sensitive_url_components() {
         assert_eq!(
             redacted_url("https://user:pass@tracker.example/path?token=secret#fragment"),
-            "https://tracker.example/path"
+            "https://tracker.example"
         );
+    }
+
+    #[test]
+    fn ap_01_rejects_unknown_fetch_input() {
+        let input = serde_json::json!({
+            "siteId": "tracker", "url": "https://tracker.example/",
+            "body": { "kind": "none" }, "resourceEndpoint": "https://evil.example"
+        });
+        assert!(serde_json::from_value::<FetchRequest>(input).is_err());
     }
 
     #[tokio::test]

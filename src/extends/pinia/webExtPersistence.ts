@@ -21,8 +21,25 @@ export class PiniaPersistenceSaveError extends Error {
   }
 }
 
+export function isStorageConflict(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; depth < 4; depth++) {
+    if (typeof current === "string") return current.startsWith("STORAGE_CONFLICT");
+    if (!current || typeof current !== "object") return false;
+    const value = current as { code?: unknown; cause?: unknown };
+    if (value.code === "STORAGE_CONFLICT") return true;
+    current = value.cause;
+  }
+  return false;
+}
+
 export async function persistent<T>(key: string, newValue: T) {
-  await extStorage.setItem(key as never, JSON.parse(JSON.stringify(newValue)) as never);
+  const value = JSON.parse(JSON.stringify(newValue));
+  if (key === "config" || key === "metadata") {
+    await extStorage.mergeItem(key, null, value);
+  } else {
+    await extStorage.setItem(key as never, value as never);
+  }
 }
 
 export interface restoreOptions<T = any> {
@@ -37,7 +54,7 @@ export async function restore<T>(key: string, options: restoreOptions<T> = {}): 
   const rawInit: T = unref(initialValue)!;
 
   try {
-    console.debug("Restoring state for key:", key);
+    console.debug("Restoring state for key:");
     const fromStorage = await extStorage.getItem(key as never);
     if (fromStorage !== null) {
       return fromStorage as T;
@@ -49,7 +66,7 @@ export async function restore<T>(key: string, options: restoreOptions<T> = {}): 
     }
   } catch (e) {
     onError?.(e);
-    return rawInit;
+    throw e;
   }
 }
 
@@ -116,50 +133,82 @@ export function piniaWebExtPersistencePlugin(context: PiniaPluginContext) {
   } = typeof persistWebExt !== "boolean" ? persistWebExt : {};
 
   const $ready = ref(false);
+  let committed: unknown = null;
+  let saveQueue = Promise.resolve();
 
   beforeRestore?.(context);
-  let restorePromise = restore(key, {
+  const restorePromise = restore(key, {
     initialValue: store.$state,
     writeDefaults: writeDefaultState,
     onError: onRestoreError,
   }).then((value) => {
     store.$patch(value as unknown as typeof store.$state);
+    committed = JSON.parse(JSON.stringify(value));
     $ready.value = true;
     afterRestore?.(context);
   });
 
   const $onReady = async (callback?: () => void) => {
     const promise = restorePromise || Promise.resolve();
-    if (callback) {
-      promise.then(callback);
-    }
-    return promise;
+    await promise;
+    callback?.();
+  };
+
+  const replaceState = (snapshot: unknown) => {
+    store.$patch((state) => {
+      for (const field of Object.keys(state)) delete state[field];
+      Object.assign(state, JSON.parse(JSON.stringify(snapshot)));
+    });
   };
 
   const $save = async (newState = store.$state) => {
-    try {
-      await persistent(key, newState);
-    } catch (error) {
-      throw new PiniaPersistenceSaveError(key, error);
-    }
+    const proposed = JSON.parse(JSON.stringify(newState));
+    const save = saveQueue.then(async () => {
+      try {
+        if (key === "config" || key === "metadata") {
+          const authoritative = await extStorage.mergeItem(key, committed as never, proposed);
+          committed = JSON.parse(JSON.stringify(authoritative));
+          if (JSON.stringify(store.$state) === JSON.stringify(proposed)) {
+            replaceState(authoritative);
+          }
+        } else {
+          await persistent(key, proposed);
+          committed = proposed;
+        }
+      } catch (error) {
+        if (key === "config" || key === "metadata") {
+          if (isStorageConflict(error)) {
+            try {
+              const latest = await extStorage.getItem(key);
+              if (latest !== null) committed = JSON.parse(JSON.stringify(latest));
+            } catch {
+              // Keep the last committed snapshot when the follow-up read fails.
+            }
+          }
+        }
+        if (JSON.stringify(store.$state) === JSON.stringify(proposed) && committed) {
+          replaceState(committed);
+        }
+        const saveError = new PiniaPersistenceSaveError(key, error);
+        try {
+          onSaveError?.(saveError);
+        } catch {
+          console.error("[pinia] Failed to report save error for store \"\"");
+        }
+        throw saveError;
+      }
+    });
+    saveQueue = save.catch(() => undefined);
+    await save;
   };
 
   const reportAutoSaveError = (error: unknown) => {
     const saveError = error instanceof PiniaPersistenceSaveError ? error : new PiniaPersistenceSaveError(key, error);
-    if (onSaveError) {
-      try {
-        onSaveError(saveError);
-      } catch (hookError) {
-        console.error(`[pinia] Failed to report automatic save error for store "${store.$id}"`, hookError);
-      }
-    } else {
-      console.error(`[pinia] Failed to automatically save store "${store.$id}"`, saveError);
-    }
+    if (!onSaveError) console.error("[pinia] Failed to automatically save store \"\"");
   };
 
   if (autoSaveType && Array.isArray(autoSaveType)) {
     store.$subscribe((mutation, state: any) => {
-      console?.log("Store `" + store.$id + "` change subscribed: ", mutation);
       if (autoSaveType.includes(mutation.type)) {
         void $save(state).catch(reportAutoSaveError);
       }

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeIpc } from "~/extends/tauri/ipc.ts";
 import { getSite, NeedLoginError, type TSiteID, type TSiteUrl } from "@ptd/site";
 import { sendMessage } from "@/messages.ts";
 import {
@@ -29,32 +29,6 @@ export interface SiteLoginResult {
 
 type InteractiveSiteLoginInput = Pick<SiteLoginInput, "siteId" | "siteUrl" | "schema" | "loginPath">;
 
-function redactUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString();
-  } catch {
-    return "<invalid-url>";
-  }
-}
-
-function describeError(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    return `axios code=${error.code ?? ""} status=${error.response?.status ?? ""} message=${error.message}`;
-  }
-  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-}
-
-async function writeLoginDebugLog(message: string): Promise<void> {
-  try {
-    await invoke("write_debug_log", { message: `login ${message}` });
-  } catch {
-    // 调试日志不可影响正常登录流程。
-  }
-}
-
 function getDefaultLoginPath(schema?: string): string {
   if (schema === "Unit3D") return "/login";
   return "/login.php";
@@ -75,11 +49,11 @@ export async function openInteractiveSiteLogin(
   input: Pick<InteractiveSiteLoginInput, "siteUrl" | "schema" | "loginPath">,
 ): Promise<void> {
   const loginUrl = resolveUrl(input.loginPath?.trim() || input.siteUrl, input.siteUrl);
-  await invoke("open_site_login", { siteUrl: input.siteUrl, loginUrl });
+  await invokeIpc("open_site_login", { siteUrl: input.siteUrl, loginUrl });
 }
 
 export async function finishInteractiveSiteLogin(input: InteractiveSiteLoginInput): Promise<SiteLoginResult> {
-  const cookieCount = await invoke<number>("finish_site_login", { siteUrl: input.siteUrl });
+  const cookieCount = await invokeIpc("finish_site_login", { siteUrl: input.siteUrl });
   return verifySyncedSiteLogin(input, cookieCount);
 }
 
@@ -103,7 +77,6 @@ export async function verifySyncedSiteLogin(
 
 export async function prepareSiteLogin(input: Pick<SiteLoginInput, "siteUrl" | "schema" | "loginPath">) {
   const loginPageUrl = resolveUrl(input.loginPath?.trim() || getDefaultLoginPath(input.schema), input.siteUrl);
-  await writeLoginDebugLog(`prepare_page url=${redactUrl(loginPageUrl)} schema=${input.schema ?? ""}`);
   const requestConfig = {
     responseType: "document",
     validateStatus: () => true,
@@ -117,55 +90,35 @@ export async function prepareSiteLogin(input: Pick<SiteLoginInput, "siteUrl" | "
   }
 
   const { data: loginPage, status } = response;
-  await writeLoginDebugLog(
-    `prepare_page_response url=${redactUrl(loginPageUrl)} status=${status} forms=${loginPage.forms.length}`,
-  );
   if (status >= 400) {
     throw new Error(`登录页请求失败（HTTP ${status}）。请检查登录页路径或站点可用性。`);
   }
   const prepared = findLoginForm(loginPage, loginPageUrl);
-  await writeLoginDebugLog(
-    `form_detected action=${redactUrl(prepared.form.action)} method=${prepared.form.method} captcha=${Boolean(prepared.captcha)} captcha_url=${prepared.captcha?.imageUrl ? redactUrl(prepared.captcha.imageUrl) : ""} hidden_fields=${Array.from(prepared.form.fields.keys()).length}`,
-  );
   return prepared;
 }
 
 export async function getCaptchaImage(prepared: PreparedSiteLogin): Promise<string | undefined> {
   const imageUrl = prepared.captcha?.imageUrl;
   if (!imageUrl) {
-    await writeLoginDebugLog(
-      `captcha_fetch_skipped reason=missing_image_url field=${prepared.captcha?.fieldName ?? ""}`,
-    );
     return;
   }
 
-  await writeLoginDebugLog(`captcha_fetch_start url=${redactUrl(imageUrl)}`);
-  try {
-    const { data, status, headers } = await axios.get<Blob>(imageUrl, {
-      responseType: "blob",
-      validateStatus: () => true,
-    });
-    const contentType = String(headers["content-type"] ?? "");
-    await writeLoginDebugLog(
-      `captcha_fetch_response url=${redactUrl(imageUrl)} status=${status} content_type=${contentType} size=${data.size} blob_type=${data.type}`,
-    );
-    if (status < 200 || status >= 300) {
-      throw new Error(`验证码图片请求失败（HTTP ${status}）。`);
-    }
-    if (!contentType.toLowerCase().startsWith("image/") || data.size === 0) {
-      throw new Error(`验证码图片响应不是有效图片（Content-Type: ${contentType || "unknown"}，大小: ${data.size}）。`);
-    }
-    return URL.createObjectURL(data);
-  } catch (error) {
-    await writeLoginDebugLog(`captcha_fetch_failed url=${redactUrl(imageUrl)} error=${describeError(error)}`);
-    throw error;
+  const { data, status, headers } = await axios.get<Blob>(imageUrl, {
+    responseType: "blob",
+    validateStatus: () => true,
+  });
+  const contentType = String(headers["content-type"] ?? "");
+  if (status < 200 || status >= 300) {
+    throw new Error(`验证码图片请求失败（HTTP ${status}）。`);
   }
+  if (!contentType.toLowerCase().startsWith("image/") || data.size === 0) {
+    throw new Error(`验证码图片响应不是有效图片（Content-Type: ${contentType || "unknown"}，大小: ${data.size}）。`);
+  }
+  return URL.createObjectURL(data);
 }
 
-export async function reportCaptchaImageRenderFailure(prepared?: PreparedSiteLogin): Promise<void> {
-  await writeLoginDebugLog(
-    `captcha_render_failed url=${prepared?.captcha?.imageUrl ? redactUrl(prepared.captcha.imageUrl) : ""}`,
-  );
+export async function reportCaptchaImageRenderFailure(_prepared?: PreparedSiteLogin): Promise<void> {
+  console.error("[login] Captcha image failed to render");
 }
 
 async function getCookieCount(siteUrl: string): Promise<number> {
@@ -182,7 +135,6 @@ async function verifyLoggedIn(siteId: TSiteID, siteUrl: string): Promise<void> {
     if (!isTransientHttp400(error)) {
       throw error;
     }
-    await writeLoginDebugLog("verify_retry status=400");
     await new Promise((resolve) => setTimeout(resolve, 500));
     await site.request({ url: "/", responseType: "document" });
   }
@@ -223,9 +175,6 @@ export async function loginSite(
     response.data,
     String(response.request?.responseURL ?? response.config.url ?? ""),
     input.siteUrl,
-  );
-  await writeLoginDebugLog(
-    `submit_response status=${response.status} final_url=${redactUrl(finalUrl)} forms=${response.data.forms.length}`,
   );
 
   const cookieCount = await getCookieCount(input.siteUrl);

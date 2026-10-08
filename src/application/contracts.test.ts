@@ -6,7 +6,7 @@ describe("应用错误与日志契约", () => {
   it("稳定错误码并脱敏敏感字段", () => {
     expect(toAppError(new Error("disk unavailable"))).toEqual({
       code: "INFRASTRUCTURE_FAILURE",
-      message: "disk unavailable",
+      message: "操作失败",
     });
     expect(redact({ password: "secret", nested: { token: "value", safe: "ok" } })).toEqual({
       password: "[REDACTED]",

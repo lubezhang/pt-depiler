@@ -35,7 +35,7 @@ const display = useDisplay();
 
 function saveSearchEntityPreferences() {
   void configStore.$save().catch((error) => {
-    console.error("[pinia] Failed to save search preferences", error);
+    console.error("[pinia] Failed to save search preferences");
   });
 }
 
@@ -116,19 +116,19 @@ watch(
 const isSearchingParsed = ref<boolean>(searchQueue.isPaused);
 
 function pauseSearchQueue() {
-  console.log("pauseSearchQueue", searchQueue);
+  console.log("pauseSearchQueue");
   searchQueue.pause();
   isSearchingParsed.value = true;
 }
 
 function startSearchQueue() {
-  console.log("startSearchQueue", searchQueue);
+  console.log("startSearchQueue");
   searchQueue.start();
   isSearchingParsed.value = false;
 }
 
 function cancelSearchQueue() {
-  console.log("cancelSearchQueue", searchQueue);
+  console.log("cancelSearchQueue");
   searchQueue.clear(); // 清空搜索队列
   // 将搜索队列中状态设置为跳过
   for (const key of Object.keys(runtimeStore.search.searchPlan)) {

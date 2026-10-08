@@ -100,7 +100,7 @@ export default class PrivateSite extends BittorrentSite {
         }
       }
     } catch (e) {
-      console.debug(e);
+      console.debug("[diagnostic] packages/site/schemas/AbstractPrivateSite.ts:103");
     }
 
     return true;
@@ -199,7 +199,7 @@ export default class PrivateSite extends BittorrentSite {
       flushUserInfo.status = EResultParseStatus.success;
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.error(error);
+        console.error("[diagnostic] packages/site/schemas/AbstractPrivateSite.ts:202");
       }
 
       flushUserInfo.status = EResultParseStatus.parseError;

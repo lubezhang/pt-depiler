@@ -83,6 +83,7 @@ export const BackupFields = [
   "downloadHistory", // 备份下载历史
 ] as const;
 export type TBackupFields = (typeof BackupFields)[number];
+export const DefaultBackupFields: TBackupFields[] = ["config", "metadata", "userInfo"];
 
 export type TBackupServerKey = string;
 export interface IBackupServerMetadata extends IBackupConfig {

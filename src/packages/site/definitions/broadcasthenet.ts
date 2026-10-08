@@ -317,13 +317,13 @@ export default class BroadcastTheNet extends Gazelle {
       const pageUrl = response.request?.responseURL || document.URL || "";
 
       if (!pageUrl.includes("series.php")) {
-        console.log(`[BroadcastTheNet] IMDB search for ${imdbId} did not redirect to series.php, no results found`);
+        console.log("[BroadcastTheNet] IMDB search for  did not redirect to series.php, no results found");
         return null;
       }
 
       return { document, pageUrl };
     } catch (error) {
-      console.log(`[BroadcastTheNet] IMDB search failed for IMDB ID: ${imdbId}. Error:`, error);
+      console.log("[BroadcastTheNet] IMDB search failed for IMDB ID: . Error:");
       return null;
     }
   }

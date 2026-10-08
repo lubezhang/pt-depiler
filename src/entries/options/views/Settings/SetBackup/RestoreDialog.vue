@@ -58,7 +58,7 @@ function loadLocalBackupFile() {
       buildBackupOptions();
     })
     .catch((err) => {
-      console.error(err);
+      console.error("[diagnostic] entries/options/views/Settings/SetBackup/RestoreDialog.vue:61");
       restoreData.value = undefined;
       isDecryptKeyValid.value = false;
       runtimeStore.showSnakebar(t("SetBackup.RestoreDialog.loadFailure", { error: err }), { color: "error" });
@@ -80,7 +80,7 @@ function loadRemoteBackupFile() {
       })
       .catch((err) => {
         runtimeStore.showSnakebar(t("SetBackup.RestoreDialog.loadFailure", { error: err }), { color: "error" });
-        console.error(err);
+        console.error("[diagnostic] entries/options/views/Settings/SetBackup/RestoreDialog.vue:83");
         isDecryptKeyValid.value = false;
       })
       .finally(() => {
@@ -145,7 +145,7 @@ function doRestore() {
       })
       .catch((err) => {
         runtimeStore.showSnakebar(t("SetBackup.RestoreDialog.failure", { error: err }), { color: "error" });
-        console.error(err);
+        console.error("[diagnostic] entries/options/views/Settings/SetBackup/RestoreDialog.vue:148");
       })
       .finally(() => {
         isDoingRestore.value = false;

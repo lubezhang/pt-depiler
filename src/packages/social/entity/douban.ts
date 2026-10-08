@@ -196,7 +196,7 @@ export async function fetchInformation(
     resDict.ratingCount = ld_json?.aggregateRating?.ratingCount ?? 0;
     resDict.summary = (ld_json?.description ?? "").replace(/\s+/g, " ").trim();
   } catch (error) {
-    console.warn(error);
+    console.warn("[diagnostic] packages/social/entity/douban.ts:199");
   } finally {
     resDict.createAt = +Date.now();
   }

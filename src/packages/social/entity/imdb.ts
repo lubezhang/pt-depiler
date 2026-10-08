@@ -132,7 +132,7 @@ export async function fetchInformation(
       resDict.ratingCount = imdbRatingData.resource.ratingCount ?? 0;
     }
   } catch (error) {
-    console.warn(error);
+    console.warn("[diagnostic] packages/social/entity/imdb.ts:135");
   } finally {
     resDict.createAt = +Date.now();
   }

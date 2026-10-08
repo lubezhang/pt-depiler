@@ -33,7 +33,7 @@ searchQueue.on("active", () => {
   // 启动后，根据 configStore 的值，自动更新 searchQueue 的并发数
   if (searchQueue.concurrency != configStore.searchEntity.queueConcurrency) {
     searchQueue.concurrency = configStore.searchEntity.queueConcurrency;
-    console.debug("Search queue concurrency changed to: ", searchQueue.concurrency);
+    console.debug("Search queue concurrency changed to: ");
   }
   // 队列开始活跃时，更新全局 Set
   globalExistingIds.clear();
@@ -120,14 +120,14 @@ export async function doSearchEntity(
   };
 
   // Search site by plan in queue
-  console.log(`Add search ${solutionKey} to queue.`);
+  console.log("Add search  to queue.");
   runtimeStore.search.searchPlan[solutionKey].queueAt = Date.now();
 
   // noinspection ES6MissingAwait
   searchQueue.add(
     async () => {
       const startAt = (runtimeStore.search.searchPlan[solutionKey].startAt = Date.now());
-      console.log(`search ${solutionKey} start at ${startAt}`);
+      console.log("search  start at ");
       runtimeStore.search.searchPlan[solutionKey].status = EResultParseStatus.working;
 
       let searchKeyword = runtimeStore.search.searchKey ?? "";
@@ -150,8 +150,7 @@ export async function doSearchEntity(
         searchEntry,
       });
       console.log(
-        `success get search ${solutionKey} result, with code ${searchStatus}: ${searchStatusMsg ?? ""}`,
-        searchResult,
+        "success get search  result, with code : ",
       );
       runtimeStore.search.searchPlan[solutionKey].status = searchStatus;
       searchStatusMsg && (runtimeStore.search.searchPlan[solutionKey].statusMsg = searchStatusMsg);
@@ -213,11 +212,11 @@ export async function doSearch(search: string, plan?: string, flush: boolean = t
       advanceFilterDictRef.value.site = { required: [], exclude: [] };
       updateTableFilterValueFn();
     } catch (e) {
-      console.error("Failed to reset table filter site field: ", e);
+      console.error("Failed to reset table filter site field: ");
     }
   }
 
-  console.log("Start search with: ", searchKey, searchPlanKey, flush);
+  console.log("Start search with: ");
 
   runtimeStore.search.searchKey = searchKey;
   runtimeStore.search.searchPlanKey = searchPlanKey;
@@ -231,7 +230,7 @@ export async function doSearch(search: string, plan?: string, flush: boolean = t
   }
 
   runtimeStore.search.searchPlanKey = searchSolution.id; // 重写 searchPlanKey 为实际的 id
-  console.log(`Expanded Search Plan for ${searchPlanKey}: `, searchSolution);
+  console.log("Expanded Search Plan for : ");
 
   if (searchSolution.solutions.length === 0) {
     runtimeStore.showSnakebar("请至少添加一个站点进行搜索", { color: "error" });
@@ -256,7 +255,7 @@ export async function retrySearch(retryStatus: EResultParseStatus[] = defaultErr
     runtimeStore.showSnakebar("没有需要重试的搜索计划", { color: "info" });
     return;
   }
-  console.log("Retrying search plans: ", shouldRetrySearchPlan);
+  console.log("Retrying search plans: ");
   for (const plan of shouldRetrySearchPlan) {
     await doSearchEntity(plan.siteId, plan.searchEntryName, plan.searchEntry, true);
   }

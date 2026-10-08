@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { cloneDeep } from "es-toolkit";
 import { useI18n } from "vue-i18n";
 
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { commitSettings } from "@/options/stores/persistenceFeedback.ts";
 import type { IBackupServerMetadata, TBackupServerKey } from "@/shared/types.ts";
 
 import Editor from "./Editor.vue";
@@ -18,18 +20,24 @@ const metadataStore = useMetadataStore();
 
 function dialogEnter() {
   if (clientId) {
-    clientConfig.value = { ...metadataStore.backupServers[clientId] }; // 防止直接修改父组件的数据
+    clientConfig.value = cloneDeep(metadataStore.backupServers[clientId]);
   }
 }
 
-function editClientConfig() {
-  metadataStore.addBackupServer(clientConfig.value as IBackupServerMetadata);
-  showDialog.value = false;
+async function editClientConfig() {
+  if (await commitSettings(() => metadataStore.addBackupServer(clientConfig.value as IBackupServerMetadata)))
+    showDialog.value = false;
 }
 </script>
 
 <template>
-  <v-dialog v-model="showDialog" max-width="800" scrollable @after-enter="dialogEnter">
+  <v-dialog
+    v-model="showDialog"
+    max-width="800"
+    scrollable
+    @after-enter="dialogEnter"
+    @after-leave="clientConfig = undefined"
+  >
     <v-card>
       <v-card-title class="pa-0">
         <v-toolbar color="blue-grey-darken-2">

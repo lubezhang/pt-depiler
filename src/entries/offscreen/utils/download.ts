@@ -35,6 +35,9 @@ import { DownloadService } from "~/application/download-service/service.ts";
 import { logger } from "./logger.ts";
 import { getSiteInstance } from "./site.ts";
 import { ptdIndexDb } from "../adapter/indexdb.ts";
+import { publicDownloadHistory } from "@/shared/security/artifacts.ts";
+import { subscribeMetadataCommits } from "@/storage.ts";
+import { toAppError } from "~/application/contracts.ts";
 
 type TLocalDownloadOption = AugmentedRequired<IDownloadTorrentOption, "downloadId" | "localDownloadMethod">;
 type TRemoteDownloadOption = AugmentedRequired<
@@ -43,7 +46,7 @@ type TRemoteDownloadOption = AugmentedRequired<
 >;
 
 function reportDownloadFailure(operation: string, error: unknown) {
-  console.error(`[download] ${operation}`, error);
+  console.error("[download] ");
   logger({ level: "error", module: "download", msg: operation });
 }
 
@@ -70,6 +73,13 @@ type DownloaderInstance = Awaited<ReturnType<typeof getDownloader>>;
 
 const downloaderInstanceCache = new Map<string, { configKey: string; instance: DownloaderInstance }>();
 
+subscribeMetadataCommits((metadata) => {
+  for (const [id, cached] of downloaderInstanceCache) {
+    const config = metadata.downloaders?.[id];
+    if (!config || getDownloaderConfigKey(config) !== cached.configKey) downloaderInstanceCache.delete(id);
+  }
+});
+
 function getDownloaderConfigKey(config: IDownloaderMetadata): string {
   const { id, type, address, username, password, timeout } = config;
   return JSON.stringify({ id, type, address, username, password, timeout });
@@ -77,7 +87,10 @@ function getDownloaderConfigKey(config: IDownloaderMetadata): string {
 
 export async function getDownloaderInstance(downloaderId: string): Promise<DownloaderInstance | null> {
   const downloaderConfig = await getDownloaderConfig(downloaderId);
-  if (!downloaderConfig.id) return null;
+  if (!downloaderConfig.id) {
+    downloaderInstanceCache.delete(downloaderId);
+    return null;
+  }
 
   const configKey = getDownloaderConfigKey(downloaderConfig);
   const cached = downloaderInstanceCache.get(downloaderId);
@@ -301,6 +314,7 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
   let downloadRequestConfig: AxiosRequestConfig = { url: torrent.link, method: "GET", timeout: 30e3 };
   let siteInstance: Awaited<ReturnType<typeof getSiteInstance<"public">>> | null = null;
 
+  try {
   if (torrent.site) {
     // 生成站点，并检查站点下载间隔，如果触及到站点下载间隔，则将下载任务放入到 alarms 中等待
     siteInstance = await getSiteInstance<"public">(torrent.site);
@@ -337,6 +351,13 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
       downloadRequestConfig,
       await siteInstance.getTorrentDownloadRequestConfig(torrent as ITorrent),
     );
+  }
+  if (!downloadRequestConfig.url || downloadRequestConfig.url === "undefined") {
+    throw new Error("种子下载地址无法重建，请从站点重新搜索后下载");
+  }
+  } catch (error) {
+    await setDownloadStatus(downloadId, "failed");
+    return { downloadId, downloadStatus: "failed", errorMessage: getErrorMessage(error) } as IDownloadTorrentResult;
   }
   try {
     await patchDownloadHistory(downloadId!, { downloadRequestConfig });
@@ -505,13 +526,9 @@ async function downloadTorrentToRemote(
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error);
-  } catch (_serializationError) {
-    return String(error);
-  }
+  if (error instanceof Error && error.message === "种子下载地址无法重建，请从站点重新搜索后下载") return error.message;
+  const appError = toAppError(error);
+  return appError.code === "INFRASTRUCTURE_FAILURE" ? "下载失败，请检查站点和下载器后重试" : appError.message;
 }
 
 export async function getDownloadHistory() {
@@ -591,24 +608,26 @@ const downloadHistoryRepository: Repository<TTorrentDownloadKey, ITorrentDownloa
     return true;
   },
   async findAll() {
-    return await (await ptdIndexDb).getAll("download_history");
+    return (await (await ptdIndexDb).getAll("download_history")).map(publicDownloadHistory);
   },
   async findById(downloadId) {
-    return await (await ptdIndexDb).get("download_history", downloadId);
+    const history = await (await ptdIndexDb).get("download_history", downloadId);
+    return history ? publicDownloadHistory(history) : undefined;
   },
   async insert(history) {
     // Vue 响应式代理不能写入 IndexedDB，保存前复制为普通对象。
-    return await (await ptdIndexDb).put("download_history", cloneDeep(history));
+    return await (await ptdIndexDb).put("download_history", cloneDeep(publicDownloadHistory(history)));
   },
   async save(history) {
-    await (await ptdIndexDb).put("download_history", history);
+    await (await ptdIndexDb).put("download_history", publicDownloadHistory(history));
   },
 };
 
 const downloadHistoryPolicy = { isEnabled: isAllowedSaveDownloadHistory };
 const downloadHistoryEvents = {
   publish(event: TDownloadHistoryEvent) {
-    downloadHistoryListeners.forEach((listener) => listener(event));
+    const safe = "history" in event ? { ...event, history: publicDownloadHistory(event.history) } : event;
+    downloadHistoryListeners.forEach((listener) => listener(safe));
   },
 };
 const downloadHistoryQueries = new DownloadHistoryQueries(downloadHistoryRepository);

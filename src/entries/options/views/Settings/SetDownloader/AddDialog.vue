@@ -14,6 +14,7 @@ import {
 import type { IDownloaderMetadata } from "@/shared/types.ts";
 import { useMetadataStore } from "@/options/stores/metadata.ts";
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
+import { isStorageConflict } from "~/extends/pinia/webExtPersistence.ts";
 
 import Editor from "./Editor.vue";
 
@@ -55,7 +56,6 @@ async function updateStoredDownloaderConfigByDefault(type: string) {
     advanceAddTorrentOptions: {},
     sortIndex: 100,
   };
-  console.log("storedDownloaderConfig", storedDownloaderConfig.value);
 }
 
 async function saveStoredDownloaderConfig() {
@@ -71,8 +71,9 @@ async function saveStoredDownloaderConfig() {
 
     showDialog.value = false;
   } catch (error) {
-    console.error("[pinia] Failed to add downloader", error);
-    runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
+    runtimeStore.showSnakebar(t(isStorageConflict(error) ? "common.saveConflict" : "common.saveFailure"), {
+      color: "error",
+    });
   } finally {
     isSaving.value = false;
   }

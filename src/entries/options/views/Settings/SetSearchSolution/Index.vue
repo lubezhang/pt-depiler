@@ -111,12 +111,12 @@ async function confirmDeleteSearchSolution(solutionId: TSolutionKey) {
 function simplePatchSearchSolution(solutionId: TSolutionKey, value: boolean) {
   metadataStore.solutions[solutionId].enabled = value;
   void metadataStore.$save().catch((error) => {
-    console.error("[pinia] Failed to save the search solution state", error);
+    console.error("[pinia] Failed to save the search solution state");
   });
 }
 
 function setDefaultSearchSolution(toDefault: boolean, solutionId: TSolutionKey) {
-  console.log(toDefault, solutionId);
+  console.log("[diagnostic] entries/options/views/Settings/SetSearchSolution/Index.vue:119");
   if (toDefault) {
     metadataStore.defaultSolutionId = solutionId;
     for (const solutionKey of Object.keys(metadataStore.solutions)) {
@@ -128,7 +128,7 @@ function setDefaultSearchSolution(toDefault: boolean, solutionId: TSolutionKey) 
   }
 
   void metadataStore.$save().catch((error) => {
-    console.error("[pinia] Failed to save the default search solution", error);
+    console.error("[pinia] Failed to save the default search solution");
   });
 }
 

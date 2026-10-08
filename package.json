@@ -32,12 +32,14 @@
     "format:check": "prettier --check package.json vitest.config.ts docs/2026-09-11-Tauri网络与认证层执行计划.md src/extends/axios/*.ts src/packages/backupServer/entity/WebDAV.ts src/entries/background/utils/cookie*.ts src/entries/options/stores/metadata.ts src/entries/options/service/siteLogin*.ts src/entries/options/service/fixtures/*.html src/entries/options/views/Settings/SetSite/LoginDialog.*",
     "check": "vue-tsc --noEmit",
     "check:architecture": "tsx scripts/check-architecture-boundaries.ts",
+    "check:diagnostics": "tsx scripts/check-diagnostics.ts",
+    "check:ipc": "cargo test --manifest-path src-tauri/Cargo.toml ap_01_generated_contract_is_current",
     "test": "vitest run",
     "build:dist": "vite build",
     "build:watch": "vite build --watch --mode development --minify false",
     "action:upload_telegram": "tsx vite/sendToTgChannel.ts",
     "release:changelog": "conventional-changelog -p angular && git add CHANGELOG.md",
-    "verify:desktop": "pnpm format:check && pnpm check && pnpm check:architecture && pnpm test && pnpm build:dist && cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml && pnpm tauri build --debug --no-bundle"
+    "verify:desktop": "pnpm format:check && pnpm check && pnpm check:architecture && pnpm check:diagnostics && pnpm test && pnpm build:dist && cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml && pnpm tauri build --debug --no-bundle"
   },
   "engines": {
     "node": ">=23.7.0",

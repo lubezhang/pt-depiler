@@ -32,6 +32,7 @@ export interface ITorrent {
    */
   url?: string;
   link?: string;
+  requiresFreshLink?: boolean;
 
   time?: number; // 发布时间戳（毫秒级）
   size?: number; // 大小

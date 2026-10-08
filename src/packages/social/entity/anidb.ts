@@ -90,7 +90,7 @@ export async function fetchInformation(
       );
     }
   } catch (error) {
-    console.warn(error);
+    console.warn("[diagnostic] packages/social/entity/anidb.ts:93");
   } finally {
     resDict.createAt = +Date.now();
   }

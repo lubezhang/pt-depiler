@@ -382,7 +382,7 @@ export default class PassThePopcorn extends Gazelle {
         try {
           pageData = JSON.parse(pageDataMatch[1]);
         } catch (error) {
-          console.error("[Site] PassThePopcorn Error parsing PageData:", error);
+          console.error("[Site] PassThePopcorn Error parsing PageData:");
         }
       }
     }

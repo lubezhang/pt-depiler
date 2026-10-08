@@ -42,7 +42,7 @@ async function loadPTPPBackupFile() {
         throw new Error("Invalid file format");
       }
       parsedPtppUserData.value = JSON.parse(ptppUserDataFileRawContent);
-      console.log(parsedPtppUserData.value);
+      console.log("[diagnostic] entries/options/views/Settings/SetBase/BackupWindow.vue:45");
       showRestorePtppUserDataDialog.value = true;
     } catch (e) {
       alert(t("ptppSettings.invalidFileFormat"));

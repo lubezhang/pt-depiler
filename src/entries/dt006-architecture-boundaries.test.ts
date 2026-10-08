@@ -23,6 +23,17 @@ afterEach(() => {
 });
 
 describe("DT-006 架构边界门禁", () => {
+  it("拒绝直接 IPC 和绕过条件存储的新增入口", () => {
+    const root = createFixture({
+      "src/entries/bypass.ts": 'import { invoke } from "@tauri-apps/api/core";\ninvoke("merge_ext_storage");\n',
+      "src/entries/direct-write.ts":
+        'import { invokeIpc } from "~/extends/tauri/ipc.ts";\ninvokeIpc("set_ext_storage", {});\n',
+      "src/entries/plugin-write.ts": 'import { load } from "@tauri-apps/plugin-store";\n',
+    });
+    expect(findArchitectureViolations(root).map((violation) => violation.rule)).toEqual(
+      expect.arrayContaining(["typed-ipc", "conditional-storage"]),
+    );
+  });
   it("当前代码仅保留登记的临时例外", () => {
     expect(findArchitectureViolations()).toEqual([]);
   });

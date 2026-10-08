@@ -1033,6 +1033,8 @@
     "save": "Save",
     "saveSettings": "Save Settings",
     "saveSuccess": "Saved successfully",
+    "saveConflict": "Settings changed in another window. Review the latest values and retry.",
+    "saveFailure": "Save failed. Please try again.",
     "search": "Search",
     "site": "Site",
     "sortIndex": "Priority",

@@ -74,7 +74,7 @@ function doSubmit() {
       searchSolution.value.searchEntries[searchSolution.value.id].requestConfig = requestConfig;
     }
   } catch (e) {
-    console.error("请求配置 JSON 解析失败", e);
+    console.error("请求配置 JSON 解析失败");
     return;
   }
 

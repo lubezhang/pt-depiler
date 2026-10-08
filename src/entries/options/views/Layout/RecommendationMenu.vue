@@ -65,7 +65,7 @@ async function loadRecommendations(flush = false) {
     }
     void enrichRecommendations(requestId);
   } catch (error) {
-    console.error("Failed to load social recommendations", error);
+    console.error("Failed to load social recommendations");
     if (recommendationItems.value.length === 0) {
       recommendationError.value = t("layout.header.hotRecommendations.loadFailed");
     }
@@ -136,7 +136,7 @@ async function enrichRecommendationItems(
           }
           updateRecommendationItem(result.item);
         } catch (error) {
-          console.error("Failed to enrich social recommendation item", item, error);
+          console.error("Failed to enrich social recommendation item");
         }
       }),
     ),

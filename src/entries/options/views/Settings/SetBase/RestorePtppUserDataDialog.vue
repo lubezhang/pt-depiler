@@ -196,7 +196,7 @@ async function doImport() {
 
     setTimeout(() => (showDialog.value = false), 5e3);
   } catch (e) {
-    console.error("导入失败", e);
+    console.error("导入失败");
     runtimeStore.showSnakebar(t("ptppSettings.RestorePtppUserDataDialog.importFailure"), { color: "error" });
   } finally {
     // 恢复自动刷新的状态

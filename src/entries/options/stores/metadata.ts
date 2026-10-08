@@ -28,6 +28,9 @@ import { sendMessage } from "@/messages.ts";
 import { useConfigStore } from "@/options/stores/config.ts";
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
 import { invalidateHostMapCache } from "~/extends/axios/tauriAdapter.ts";
+import { reportPersistenceFailure } from "./persistenceFeedback.ts";
+import { entitySummary } from "@/shared/security/entities.ts";
+import { publicDownloadOptions } from "@/shared/security/artifacts.ts";
 
 type TSimplePatchFieldKey = keyof Pick<
   IMetadataPiniaStorageSchema,
@@ -35,7 +38,7 @@ type TSimplePatchFieldKey = keyof Pick<
 >;
 
 export const useMetadataStore = defineStore("metadata", {
-  persistWebExt: true,
+  persistWebExt: { onSaveError: reportPersistenceFailure },
   state: (): IMetadataPiniaStorageSchema => ({
     sites: {},
     solutions: {},
@@ -64,7 +67,7 @@ export const useMetadataStore = defineStore("metadata", {
 
     getAddedSites(state) {
       return Object.entries(state.sites).map(([siteId, metadata]) => {
-        return { ...metadata, id: siteId };
+        return { ...entitySummary(metadata), id: siteId };
       });
     },
 
@@ -296,11 +299,13 @@ export const useMetadataStore = defineStore("metadata", {
     },
 
     getDownloaders(state) {
-      return Object.values(state.downloaders);
+      return Object.values(state.downloaders).map(entitySummary);
     },
 
     getEnabledDownloaders(state) {
-      return Object.values(state.downloaders).filter((downloader) => downloader.enabled);
+      return Object.values(state.downloaders)
+        .filter((downloader) => downloader.enabled)
+        .map(entitySummary);
     },
 
     getSortedEnabledDownloaders(state): Array<IDownloaderMetadata> {
@@ -332,11 +337,13 @@ export const useMetadataStore = defineStore("metadata", {
     },
 
     getMediaServers(state) {
-      return Object.values(state.mediaServers);
+      return Object.values(state.mediaServers).map(entitySummary);
     },
 
     getEnabledMediaServers(state) {
-      return Object.values(state.mediaServers).filter((mediaServer) => mediaServer.enabled);
+      return Object.values(state.mediaServers)
+        .filter((mediaServer) => mediaServer.enabled)
+        .map(entitySummary);
     },
 
     getBackupServerIds(state) {
@@ -344,7 +351,7 @@ export const useMetadataStore = defineStore("metadata", {
     },
 
     getBackupServers(state) {
-      return Object.values(state.backupServers);
+      return Object.values(state.backupServers).map(entitySummary);
     },
   },
   actions: {
@@ -376,6 +383,7 @@ export const useMetadataStore = defineStore("metadata", {
       const { reBuildMap = true } = options ?? {};
 
       delete this.sites[siteId];
+      delete this.lastUserInfo[siteId];
 
       if (reBuildMap) {
         await this.buildSiteMapCache(false);
@@ -487,6 +495,9 @@ export const useMetadataStore = defineStore("metadata", {
 
     async removeDownloader(downloaderId: TDownloaderKey) {
       delete this.downloaders[downloaderId];
+      if (this.defaultDownloader.id === downloaderId) this.defaultDownloader = {};
+      if (this.lastDownloader?.id === downloaderId) this.lastDownloader = {};
+      if (this.lastKeepUpload?.downloaderId === downloaderId) this.lastKeepUpload = {};
       await this.$save();
     },
 
@@ -496,7 +507,9 @@ export const useMetadataStore = defineStore("metadata", {
     },
 
     async setLastDownloader(downloader: IMetadataPiniaStorageSchema["lastDownloader"]) {
-      this.lastDownloader = downloader;
+      this.lastDownloader = downloader
+        ? { id: downloader.id, options: publicDownloadOptions(downloader.options ?? {}) }
+        : {};
       await this.$save();
     },
 

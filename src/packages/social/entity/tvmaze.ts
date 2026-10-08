@@ -80,7 +80,7 @@ export async function fetchInformation(
     resDict.poster = data.image.medium ?? data.image.original ?? "";
     resDict.ratingScore = data.rating.average ?? 0;
   } catch (error) {
-    console.warn(error);
+    console.warn("[diagnostic] packages/social/entity/tvmaze.ts:83");
   } finally {
     resDict.createAt = +Date.now();
   }

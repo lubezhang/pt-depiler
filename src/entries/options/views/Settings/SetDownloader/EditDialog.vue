@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { cloneDeep } from "es-toolkit";
 import { useI18n } from "vue-i18n";
 
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { commitSettings } from "@/options/stores/persistenceFeedback.ts";
 import type { IDownloaderMetadata, TDownloaderKey } from "@/shared/types.ts";
 
 import Editor from "./Editor.vue";
@@ -18,18 +20,28 @@ const metadataStore = useMetadataStore();
 
 function dialogEnter() {
   if (clientId) {
-    clientConfig.value = { sortIndex: 100, advanceAddTorrentOptions: {}, ...metadataStore.downloaders[clientId] }; // 防止直接修改父组件的数据
+    clientConfig.value = cloneDeep({
+      sortIndex: 100,
+      advanceAddTorrentOptions: {},
+      ...metadataStore.downloaders[clientId],
+    });
   }
 }
 
-function editClientConfig() {
-  metadataStore.addDownloader(clientConfig.value as IDownloaderMetadata);
-  showDialog.value = false;
+async function editClientConfig() {
+  if (await commitSettings(() => metadataStore.addDownloader(clientConfig.value as IDownloaderMetadata)))
+    showDialog.value = false;
 }
 </script>
 
 <template>
-  <v-dialog v-model="showDialog" max-width="800" scrollable @after-enter="dialogEnter">
+  <v-dialog
+    v-model="showDialog"
+    max-width="800"
+    scrollable
+    @after-enter="dialogEnter"
+    @after-leave="clientConfig = undefined"
+  >
     <v-card>
       <v-card-title class="pa-0">
         <v-toolbar color="blue-grey-darken-2">

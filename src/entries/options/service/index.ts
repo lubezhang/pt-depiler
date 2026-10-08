@@ -20,6 +20,8 @@ import "@/background/utils/alarms.ts";
 
 // 启动时修复存储中的坏数据
 import { startStoredUserInfoRepair } from "./startup.ts";
+import { registerSchedulerListeners } from "@/background/utils/alarms.ts";
+import { repairPersistentArtifacts } from "./artifactRecovery.ts";
 
 let initialized = false;
 
@@ -29,6 +31,11 @@ export async function registerLegacyServices(): Promise<void> {
   initialized = true;
 }
 
-export function startLegacyRecovery(): void {
-  startStoredUserInfoRepair();
+export async function startLegacyRecovery(): Promise<void> {
+  await startStoredUserInfoRepair();
+  await repairPersistentArtifacts();
+}
+
+export async function startLegacyWorkers(): Promise<() => Promise<void>> {
+  return await registerSchedulerListeners();
 }

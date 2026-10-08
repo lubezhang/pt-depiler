@@ -8,6 +8,7 @@ import type { HttpClient, Logger, SettingsReader } from "~/domain/ports/index.ts
 
 import { logger } from "./logger.ts";
 import { getSiteInstance } from "./site.ts";
+import { publicSearchSnapshot } from "@/shared/security/artifacts.ts";
 
 const legacyHttpClient: HttpClient = {
   async request({ body, method, path }) {
@@ -58,7 +59,7 @@ onMessage("getSearchResultSnapshotData", async ({ data: snapshotId }) => {
 
 onMessage("saveSearchResultSnapshotData", async ({ data: { snapshotId, data } }) => {
   const snapshotData = await getSnapshotData();
-  snapshotData[snapshotId] = data;
+  snapshotData[snapshotId] = publicSearchSnapshot(data);
   logger({ msg: `A new SearchResult Snapshot will be add at: ${snapshotId}`, data });
   await sendMessage("setExtStorage", { key: "searchResultSnapshot", value: snapshotData });
 });

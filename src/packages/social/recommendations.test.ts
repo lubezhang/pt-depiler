@@ -14,8 +14,6 @@ import { getSocialRecommendations } from "./recommendations.ts";
 
 interface IpcRequest {
   siteId: string;
-  resourceEndpoint: string;
-  resourceKind: string;
   url: string;
   binary: boolean;
 }
@@ -49,13 +47,11 @@ describe("热门推荐请求", () => {
 
     const requests = mocks.invoke.mock.calls.map(([, payload]) => payload.req as IpcRequest);
     expect(requests).toHaveLength(10);
-    expect(
-      requests.every((req) => req.resourceKind === "site" && req.resourceEndpoint === new URL(req.url).origin),
-    ).toBe(true);
-    const identities = new Map(requests.map((req) => [req.resourceEndpoint, req.siteId]));
+    expect(requests.every((req) => !("resourceEndpoint" in req) && !("resourceKind" in req))).toBe(true);
+    const identities = new Map(requests.map((req) => [new URL(req.url).origin, req.siteId]));
     expect(identities.size).toBe(2);
     expect(new Set(identities.values()).size).toBe(2);
-    expect(requests.every((req) => req.siteId === identities.get(req.resourceEndpoint))).toBe(true);
+    expect(requests.every((req) => req.siteId === identities.get(new URL(req.url).origin))).toBe(true);
   });
 
   it("海报请求保留二进制响应", async () => {

@@ -376,7 +376,7 @@ async function fetchRecommendationSource(source: ISocialRecommendationSource): P
   });
 
   if (!parserEntry) {
-    console.warn(`No social recommendation parser found for ${source.url}`);
+    console.warn("No social recommendation parser found for ");
     return [];
   }
 
@@ -420,7 +420,6 @@ export async function getSocialRecommendations(
     hasRejectedSource = true;
     console.warn(
       "Failed to fetch social recommendations",
-      result.status === "rejected" ? result.reason : "empty result",
     );
     return [];
   });

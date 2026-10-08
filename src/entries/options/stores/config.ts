@@ -8,6 +8,7 @@ import { usePreferredDark } from "@vueuse/core";
 import type { IConfigPiniaStorageSchema, supportThemeType } from "@/shared/types.ts";
 
 import { useMetadataStore } from "./metadata.ts";
+import { reportPersistenceFailure } from "./persistenceFeedback.ts";
 
 const deprecatedConfigKeys = [
   "myDataTableControl.tableFontSize", // v0.0.4.961 废弃
@@ -37,6 +38,7 @@ export const defaultDownloadServiceManagerSettings = {
 
 export const useConfigStore = defineStore("config", {
   persistWebExt: {
+    onSaveError: reportPersistenceFailure,
     afterRestore: (context) => {
       // 清理已废弃的配置项
       const state = context.store.$state as any;
@@ -84,7 +86,7 @@ export const useConfigStore = defineStore("config", {
 
       if (needsSave) {
         void context.store.$save().catch((error) => {
-          console.error("[pinia] Failed to persist normalized config after restore", error);
+          console.error("[pinia] Failed to persist normalized config after restore");
         });
       }
     },
@@ -383,7 +385,7 @@ export const useConfigStore = defineStore("config", {
     updateDownloadServiceManagerSettings(settings: IConfigPiniaStorageSchema["downloadServiceManager"]) {
       this.downloadServiceManager = { ...settings };
       void this.$save().catch((error) => {
-        console.error("[pinia] Failed to persist download service manager settings", error);
+        console.error("[pinia] Failed to persist download service manager settings");
       });
     },
     updateTableBehavior(table: string, key: string, data: any) {
@@ -391,7 +393,7 @@ export const useConfigStore = defineStore("config", {
       this.tableBehavior[table][key] = data;
       if (this.saveTableBehavior) {
         void this.$save().catch((error) => {
-          console.error("[pinia] Failed to persist table behavior", error);
+          console.error("[pinia] Failed to persist table behavior");
         });
       }
     },

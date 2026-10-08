@@ -281,7 +281,7 @@ export default class S3 extends AbstractBackupServer<S3Config> {
       });
       return true;
     } catch (e) {
-      console?.warn("S3 addFile failed:", e);
+      console?.warn("S3 addFile failed:");
       return false;
     }
   }

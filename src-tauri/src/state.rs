@@ -28,27 +28,18 @@ struct CookiePersistence {
 }
 
 impl CookiePersistence {
-    fn load(path: PathBuf) -> (Self, CookieStore, Option<String>) {
+    fn load(path: PathBuf) -> Result<(Self, CookieStore), String> {
         let persistence = Self { path };
-        if !persistence.path.exists() {
-            return (persistence, CookieStore::default(), None);
-        }
-
-        match persistence.read_store() {
-            Ok(store) => (persistence, store, None),
-            Err(error) => {
-                let diagnostic = format!(
-                    "cookie_store_load_failed file={} error={error}",
-                    persistence.path.display()
-                );
-                (persistence, CookieStore::default(), Some(diagnostic))
+        let plaintext = match fs::read(&persistence.path) {
+            Ok(plaintext) => plaintext,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok((persistence, CookieStore::default()));
             }
-        }
-    }
-
-    fn read_store(&self) -> Result<CookieStore, String> {
-        let plaintext = fs::read(&self.path).map_err(|error| error.to_string())?;
-        cookie_store::serde::json::load(Cursor::new(plaintext)).map_err(|error| error.to_string())
+            Err(_) => return Err("COOKIE_STORE_LOAD_FAILED".to_string()),
+        };
+        let store = cookie_store::serde::json::load(Cursor::new(plaintext))
+            .map_err(|_| "COOKIE_STORE_LOAD_FAILED")?;
+        Ok((persistence, store))
     }
 
     fn persist(&self, store: &CookieStore) -> Result<(), String> {
@@ -87,19 +78,17 @@ fn sync_directory(_path: &Path) -> Result<(), String> {
 
 /// 全局应用状态。Cookie Store 由所有请求共享，并按 RFC 6265 的 domain/path 规则隔离。
 pub struct AppState {
-    pub client: Client,
     pub(crate) no_redirect_client: Client,
     pub cookie_store: Arc<CookieStoreMutex>,
     http_cancellations: Mutex<HttpCancellationRegistry>,
     site_login_target: Mutex<Option<String>>,
     persistence: Option<CookiePersistence>,
-    startup_diagnostic: Option<String>,
 }
 
 impl AppState {
     /// 仅用于测试和无持久化工具上下文。桌面应用必须使用 `load`。
     pub fn new() -> Self {
-        Self::from_store(CookieStore::default(), None, None, false)
+        Self::from_store(CookieStore::default(), None, false)
     }
 
     pub fn load(app: &tauri::AppHandle) -> Result<Self, String> {
@@ -109,63 +98,47 @@ impl AppState {
                 "PT-depiler debug E2E Cookie Store is active at {}",
                 app_data_dir.display()
             );
-            return Ok(Self::with_persistence(
-                app_data_dir.join(COOKIE_FILE_NAME),
-                true,
-            ));
+            return Self::with_persistence(app_data_dir.join(COOKIE_FILE_NAME), false);
         }
 
         let app_data_dir = app
             .path()
             .app_data_dir()
             .map_err(|error| error.to_string())?;
-        Ok(Self::with_persistence(
-            app_data_dir.join(COOKIE_FILE_NAME),
-            true,
-        ))
+        Self::with_persistence(app_data_dir.join(COOKIE_FILE_NAME), false)
     }
 
-    fn with_persistence(path: PathBuf, use_system_proxy: bool) -> Self {
-        let (persistence, store, diagnostic) = CookiePersistence::load(path);
-        Self::from_store(store, Some(persistence), diagnostic, use_system_proxy)
+    fn with_persistence(path: PathBuf, use_system_proxy: bool) -> Result<Self, String> {
+        let (persistence, store) = CookiePersistence::load(path)?;
+        Ok(Self::from_store(store, Some(persistence), use_system_proxy))
     }
 
     #[cfg(test)]
     pub(crate) fn persistent_for_test(path: PathBuf) -> Self {
-        Self::with_persistence(path, false)
+        Self::with_persistence(path, false).expect("load test Cookie Store")
     }
 
     fn from_store(
         store: CookieStore,
         persistence: Option<CookiePersistence>,
-        startup_diagnostic: Option<String>,
         use_system_proxy: bool,
     ) -> Self {
         let cookie_store = Arc::new(CookieStoreMutex::new(store));
-        let mut client_builder = Client::builder()
-            .cookie_provider(Arc::clone(&cookie_store))
-            .redirect(Policy::limited(10));
         let mut no_redirect_client_builder = Client::builder()
             .cookie_provider(Arc::clone(&cookie_store))
             .redirect(Policy::none());
         if !use_system_proxy {
-            client_builder = client_builder.no_proxy();
             no_redirect_client_builder = no_redirect_client_builder.no_proxy();
         }
-        let client = client_builder
-            .build()
-            .expect("failed to build reqwest client");
         let no_redirect_client = no_redirect_client_builder
             .build()
             .expect("failed to build no-redirect reqwest client");
         Self {
-            client,
             no_redirect_client,
             cookie_store,
             http_cancellations: Mutex::new(HttpCancellationRegistry::default()),
             site_login_target: Mutex::new(None),
             persistence,
-            startup_diagnostic,
         }
     }
 
@@ -180,8 +153,55 @@ impl AppState {
         persistence.persist(&store)
     }
 
-    pub fn startup_diagnostic(&self) -> Option<&str> {
-        self.startup_diagnostic.as_deref()
+    pub(crate) fn commit_with_cookie_cleanup<T>(
+        &self,
+        previous: &[String],
+        next: &[String],
+        commit: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut store = self
+            .cookie_store
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:cookie_lock")?;
+        let matches = |cookie: &crate::http::CookieInfo, hosts: &[String]| {
+            hosts.iter().any(|host| {
+                let domain = cookie.domain.trim_start_matches('.');
+                host == domain || !cookie.host_only && host.ends_with(&format!(".{domain}"))
+            })
+        };
+        let removed = store
+            .iter_any()
+            .map(crate::http::cookie_to_info)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|cookie| matches(cookie, previous) && !matches(cookie, next))
+            .collect::<Vec<_>>();
+        if removed.is_empty() {
+            return commit();
+        }
+        let mut proposed = store.clone();
+        for cookie in &removed {
+            proposed.remove(
+                cookie.domain.trim_start_matches('.'),
+                &cookie.path,
+                &cookie.name,
+            );
+        }
+        if let Some(persistence) = &self.persistence {
+            persistence.persist(&proposed)?;
+        }
+        match commit() {
+            Ok(result) => {
+                *store = proposed;
+                Ok(result)
+            }
+            Err(error) => {
+                if let Some(persistence) = &self.persistence {
+                    persistence.persist(&store)?;
+                }
+                Err(error)
+            }
+        }
     }
 
     pub(crate) fn set_site_login_target(&self, site_url: String) -> Result<(), String> {
@@ -281,6 +301,7 @@ mod tests {
 
     fn persistent_state(directory: &Path) -> AppState {
         AppState::with_persistence(directory.join(COOKIE_FILE_NAME), false)
+            .expect("load test Cookie Store")
     }
 
     fn insert_cookie(state: &AppState, value: &str) {
@@ -323,22 +344,20 @@ mod tests {
     }
 
     #[test]
-    fn corrupted_cookie_file_falls_back_to_empty_store_with_diagnostic() {
+    fn ap_03_corrupted_cookie_file_blocks_startup_and_preserves_source() {
         let directory = tempfile::tempdir().expect("temporary app data");
         fs::write(directory.path().join(COOKIE_FILE_NAME), b"corrupted")
             .expect("write corrupted cookie file");
 
-        let state = persistent_state(directory.path());
-
-        assert!(state.startup_diagnostic().is_some());
         assert_eq!(
-            state
-                .cookie_store
-                .lock()
-                .expect("cookie store lock")
-                .iter_any()
-                .count(),
-            0
+            AppState::with_persistence(directory.path().join(COOKIE_FILE_NAME), false)
+                .err()
+                .as_deref(),
+            Some("COOKIE_STORE_LOAD_FAILED")
+        );
+        assert_eq!(
+            fs::read(directory.path().join(COOKIE_FILE_NAME)).unwrap(),
+            b"corrupted"
         );
     }
 

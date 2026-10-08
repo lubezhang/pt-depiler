@@ -66,7 +66,7 @@ export default class BittorrentSite {
   constructor(metadata: ISiteMetadata, userConfig: ISiteUserConfig = {}) {
     this.metadata = toMerged(metadata, userConfig.merge ?? {});
     this.userConfig = userConfig;
-    console?.log(`[Site] ${this.name} Initialized with Metadata: `, this.metadata, "UserConfig: ", this.userConfig);
+    console?.log("[Site]  Initialized with Metadata: ");
   }
 
   get name(): string {
@@ -174,7 +174,7 @@ export default class BittorrentSite {
    * @param searchEntry
    */
   public async getSearchResult(keywords?: string, searchEntry: ISearchEntryRequestConfig = {}): Promise<ISearchResult> {
-    console?.log(`[Site] ${this.name} start search with keywords:`, keywords, "input searchEntry:", searchEntry);
+    console?.log("[Site]  start search with keywords:");
     const result: ISearchResult = {
       data: [],
       status: EResultParseStatus.unknownError,
@@ -206,11 +206,11 @@ export default class BittorrentSite {
       return result;
     }
 
-    console?.log(`[Site] ${this.name} start search with merged searchEntry:`, searchEntry);
+    console?.log("[Site]  start search with merged searchEntry:");
 
     // 2.1 检查 keywords 是否为空
     if (searchEntry.skipWhiteSpacePlaceholder === true && !keywords) {
-      console?.log(`[Site] ${this.name} skipped due to empty keywords`);
+      console?.log("[Site]  skipped due to empty keywords");
       result.status = EResultParseStatus.passParse;
       result.statusMsg = "i18n.noEmptyKeywords";
       return result;
@@ -218,7 +218,7 @@ export default class BittorrentSite {
 
     // 2.2 检查字符集兼容性并过滤站点
     if (searchEntry.skipNonLatinCharacters === true && keywords && hasNonLatinCharacters(keywords)) {
-      console?.log(`[Site] ${this.name} skipped due to non-Latin characters in query:`, keywords);
+      console?.log("[Site]  skipped due to non-Latin characters in query:");
       result.status = EResultParseStatus.passParse;
       result.statusMsg = "i18n.noNonLatin";
       return result;
@@ -290,7 +290,7 @@ export default class BittorrentSite {
       await sleep(searchEntry.requestDelay!);
     }
 
-    console?.log(`[Site] ${this.name} start search with requestConfig:`, requestConfig);
+    console?.log("[Site]  start search with requestConfig:");
 
     // 8. 请求页面并转化为document
     try {
@@ -299,7 +299,7 @@ export default class BittorrentSite {
       result.status = EResultParseStatus.success;
     } catch (e) {
       if (import.meta.env.DEV) {
-        console.error(e);
+        console.error("[diagnostic] packages/site/schemas/AbstractBittorrentSite.ts:302");
       }
       result.status = EResultParseStatus.parseError;
 
@@ -551,7 +551,7 @@ export default class BittorrentSite {
       try {
         torrents.push((await this.parseWholeTorrentFromRow({}, tr, searchConfig!)) as ITorrent);
       } catch (e) {
-        console.error(`[PTD] site '${this.name}' parseWholeTorrentFromRow Error:`, e, tr);
+        console.error("[PTD] site '' parseWholeTorrentFromRow Error:");
         throw e;
       }
     }
@@ -675,6 +675,9 @@ export default class BittorrentSite {
    */
   public async getTorrentDownloadRequestConfig(torrent: ITorrent): Promise<AxiosRequestConfig> {
     const torrentDownloadLink = await this.getTorrentDownloadLink(torrent);
+    if (!torrentDownloadLink || torrentDownloadLink === "undefined") {
+      throw new Error("种子下载地址无法重建，请从站点重新搜索后下载");
+    }
     return toMerged(
       { baseURL: this.url, url: torrentDownloadLink, method: "GET", timeout: this.userConfig.timeout ?? 30e3 },
       this.metadata.download?.requestConfig ?? {},

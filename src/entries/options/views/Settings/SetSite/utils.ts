@@ -2,6 +2,7 @@ import { computedAsync } from "@vueuse/core";
 import { definitionList, ISiteMetadata, type ISiteUserConfig, TSiteID } from "@ptd/site";
 
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { entitySummary } from "@/shared/security/entities.ts";
 
 export async function getCanAddedSiteMetadata() {
   const canAddedSiteMetadata: Record<TSiteID, ISiteMetadata> = {};
@@ -29,7 +30,7 @@ export const allAddedSiteInfo = computedAsync<ISiteTableItem[]>(async () => {
     sitesReturn.push({
       id: siteId,
       metadata: await metadataStore.getSiteMetadata(siteId),
-      userConfig: siteUserConfig,
+      userConfig: entitySummary(siteUserConfig),
     });
   }
 

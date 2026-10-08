@@ -1,5 +1,4 @@
 import { format } from "date-fns";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { EResultParseStatus, type TSiteID } from "@ptd/site/types/base.ts";
 
@@ -8,6 +7,7 @@ import { onMessage, sendMessage } from "@/messages.ts";
 import { IDownloadTorrentOption, IMetadataPiniaStorageSchema } from "@/shared/types.ts";
 
 import { sleep } from "~/helper.ts";
+import { invokeIpc } from "~/extends/tauri/ipc.ts";
 
 export enum EJobType {
   FlushUserInfo = "flushUserInfo",
@@ -16,21 +16,28 @@ export enum EJobType {
 }
 
 function reportTaskFailure(operation: string, error: unknown, data?: Record<string, unknown>) {
-  console.error(`[background] ${operation}`, error);
+  console.error("[background] ");
   void sendMessage("logger", { level: "error", module: "background", msg: operation, data }).catch((loggerError) => {
-    console.error(`[background] Failed to record task diagnostic: ${operation}`, loggerError);
+    console.error("[background] Failed to record task diagnostic: ");
   });
 }
 
 function recordTaskLog(message: string, data?: Record<string, unknown>) {
   void sendMessage("logger", { level: "info", module: "background", msg: message, data }).catch((error) => {
-    console.error(`[background] Failed to record task log: ${message}`, error);
+    console.error("[background] Failed to record task log: ");
   });
 }
 
 function runBackgroundTask(operation: string, task: () => Promise<void>) {
   void task().catch((error) => reportTaskFailure(operation, error));
 }
+
+interface SchedulerLifetime {
+  stopped: boolean;
+  retryTimers: Set<ReturnType<typeof setTimeout>>;
+}
+
+let schedulerLifetime: SchedulerLifetime | undefined;
 
 export async function runAutoFlushUserInfo(retryIndex = 0): Promise<void> {
   const configStore = await extStorage.getItem("config");
@@ -97,12 +104,16 @@ export async function runAutoFlushUserInfo(retryIndex = 0): Promise<void> {
 
   if (failFlushSites.length > 0 && retryIndex < retryMax) {
     recordTaskLog("Scheduling auto-refresh retry", { failCount: failFlushSites.length, retryIndex: retryIndex + 1 });
-    setTimeout(
+    const lifetime = schedulerLifetime;
+    const timer = setTimeout(
       () => {
+        lifetime?.retryTimers.delete(timer);
+        if (lifetime?.stopped) return;
         runBackgroundTask("Scheduled auto-refresh retry failed", () => runAutoFlushUserInfo(retryIndex + 1));
       },
       retryInterval * 60 * 1000,
     );
+    lifetime?.retryTimers.add(timer);
   }
 }
 
@@ -159,7 +170,7 @@ export async function handleReDownload(data: IDownloadTorrentOption & { download
 
   pendingRedownloads.set(data.downloadId, data);
   try {
-    await invoke("schedule_redownload", { downloadId: String(data.downloadId), delaySecs: 30 });
+    await invokeIpc("schedule_redownload", { downloadId: String(data.downloadId), delaySecs: 30 });
   } catch (error) {
     pendingRedownloads.delete(data.downloadId);
     reportTaskFailure("Failed to schedule delayed torrent retry", error);
@@ -186,18 +197,42 @@ export async function handleScheduledRedownload(downloadId: number): Promise<voi
 
 onMessage("reDownloadTorrent", async ({ data }) => await handleReDownload(data));
 
-export function registerSchedulerListeners() {
-  void listen("scheduler://flush-user-info", () => {
-    runBackgroundTask("Auto-refresh scheduler event failed", () => runAutoFlushUserInfo());
-  }).catch((error) => reportTaskFailure("Failed to register auto-refresh scheduler listener", error));
-
-  void listen("scheduler://auto-backup", () => {
-    runBackgroundTask("Auto-backup scheduler event failed", runAutoBackup);
-  }).catch((error) => reportTaskFailure("Failed to register auto-backup scheduler listener", error));
-
-  void listen<string>("scheduler://redownload", (event) => {
-    runBackgroundTask("Scheduled torrent retry event failed", () => handleScheduledRedownload(Number(event.payload)));
-  }).catch((error) => reportTaskFailure("Failed to register torrent retry scheduler listener", error));
+export async function registerSchedulerListeners(): Promise<() => Promise<void>> {
+  let stopped = false;
+  const lifetime: SchedulerLifetime = { stopped: false, retryTimers: new Set() };
+  schedulerLifetime = lifetime;
+  const active = new Set<Promise<void>>();
+  const unlisten: Array<() => void> = [];
+  const run = (operation: string, task: () => Promise<void>) => {
+    if (stopped) return;
+    const pending = task().catch((error) => reportTaskFailure(operation, error));
+    active.add(pending);
+    void pending.finally(() => active.delete(pending));
+  };
+  try {
+    unlisten.push(await listen("scheduler://flush-user-info", () => {
+      run("Auto-refresh scheduler event failed", () => runAutoFlushUserInfo());
+    }));
+    unlisten.push(await listen("scheduler://auto-backup", () => {
+      run("Auto-backup scheduler event failed", runAutoBackup);
+    }));
+    unlisten.push(await listen<string>("scheduler://redownload", (event) => {
+      run("Scheduled torrent retry event failed", () => handleScheduledRedownload(Number(event.payload)));
+    }));
+  } catch (error) {
+    stopped = true;
+    lifetime.stopped = true;
+    if (schedulerLifetime === lifetime) schedulerLifetime = undefined;
+    unlisten.forEach((stop) => stop());
+    throw error;
+  }
+  return async () => {
+    stopped = true;
+    lifetime.stopped = true;
+    for (const timer of lifetime.retryTimers) clearTimeout(timer);
+    lifetime.retryTimers.clear();
+    if (schedulerLifetime === lifetime) schedulerLifetime = undefined;
+    unlisten.forEach((stop) => stop());
+    await Promise.all([...active]);
+  };
 }
-
-registerSchedulerListeners();

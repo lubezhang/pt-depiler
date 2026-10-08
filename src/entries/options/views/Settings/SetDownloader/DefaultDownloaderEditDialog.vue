@@ -49,7 +49,7 @@ async function saveDefaultDownloader() {
     await metadataStore.$save();
     showDialog.value = false;
   } catch (error) {
-    console.error("[pinia] Failed to save the default downloader", error);
+    console.error("[pinia] Failed to save the default downloader");
     runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
   } finally {
     isSaving.value = false;
@@ -109,8 +109,16 @@ function enterDialog() {
           </v-autocomplete>
 
           <!-- 如果用户已经在对应下载器的预设了下载路径和标签，则加载对应的列表 -->
-          <v-combobox v-model="defaultDownloaderConfig.folder" :items="suggests.folder" :label="t('SetDownloader.PathAndTag.downloadPath.title')" />
-          <v-combobox v-model="defaultDownloaderConfig.tags" :items="suggests.tags" :label="t('SetDownloader.PathAndTag.tags.title')" />
+          <v-combobox
+            v-model="defaultDownloaderConfig.folder"
+            :items="suggests.folder"
+            :label="t('SetDownloader.PathAndTag.downloadPath.title')"
+          />
+          <v-combobox
+            v-model="defaultDownloaderConfig.tags"
+            :items="suggests.tags"
+            :label="t('SetDownloader.PathAndTag.tags.title')"
+          />
         </v-form>
       </v-card-text>
       <v-divider />

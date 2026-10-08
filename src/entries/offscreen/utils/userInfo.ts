@@ -8,6 +8,7 @@ import { onMessage, sendMessage } from "@/messages.ts";
 import type { IMetadataPiniaStorageSchema, IConfigPiniaStorageSchema, TUserInfoStorageSchema } from "@/shared/types.ts";
 
 import { logger } from "./logger.ts";
+import { cachedUserInfo } from "./backupRedaction.ts";
 import { getSiteInstance } from "./site.ts";
 
 const flushQueue = new PQueue({ concurrency: 1 }); // 默认设置为 1，避免并发搜索
@@ -87,6 +88,7 @@ export async function getSiteUserInfoResult(siteId: string) {
 onMessage("getSiteUserInfoResult", async ({ data: siteId }) => await getSiteUserInfoResult(siteId));
 
 export async function setSiteLastUserInfo(userData: IUserInfo) {
+  userData = cachedUserInfo(userData) as IUserInfo;
   return setSiteLastUserInfoQueue.add(async () => {
     logger({ msg: `setSiteLastUserInfo for ${userData.site}`, data: userData });
     const site = userData.site;

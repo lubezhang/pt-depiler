@@ -20,6 +20,7 @@ const { downloadHistory, indexDb } = vi.hoisted(() => {
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 vi.mock("@/storage.ts", () => ({
+  subscribeMetadataCommits: vi.fn(() => () => undefined),
   extStorage: {
     getItem: vi.fn().mockResolvedValue({}),
     setItem: vi.fn().mockResolvedValue(undefined),

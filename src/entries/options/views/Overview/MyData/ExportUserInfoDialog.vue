@@ -100,7 +100,7 @@ async function doExport() {
         }
         return items;
       } catch (e) {
-        console.error(`加载站点 ${siteId} 历史数据失败`, e);
+        console.error("加载站点  历史数据失败");
         return [];
       }
     });

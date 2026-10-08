@@ -1030,6 +1030,8 @@
     "save": "保存",
     "saveSettings": "保存设置",
     "saveSuccess": "保存成功",
+    "saveConflict": "配置已在其他窗口修改，请检查最新内容后重试",
+    "saveFailure": "保存失败，请重试",
     "search": "搜索",
     "site": "站点",
     "sortIndex": "优先级",

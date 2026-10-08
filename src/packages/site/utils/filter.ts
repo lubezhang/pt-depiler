@@ -203,7 +203,7 @@ export const definedFilters: Record<string, TQueryFilterFn> = {
    * No change for the query.
    */
   dump: (query) => {
-    console?.log(query);
+    console?.log("[diagnostic] packages/site/utils/filter.ts:206");
     return query;
   },
 };

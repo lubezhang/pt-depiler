@@ -35,7 +35,7 @@ async function loadTasks() {
   try {
     tasks.value = await sendMessage("getKeepUploadTasks", undefined);
   } catch (e) {
-    console.error("Failed to load keep upload tasks:", e);
+    console.error("Failed to load keep upload tasks:");
     tasks.value = [];
   } finally {
     loading.value = false;
@@ -127,6 +127,8 @@ async function sendTorrentsToDownloader(task: IKeepUploadTask, items: IKeepUploa
       const result = await sendMessage("downloadTorrent", {
         torrent: {
           site: item.site,
+          id: item.id,
+          requiresFreshLink: item.requiresFreshLink,
           title: item.title,
           subTitle: item.subTitle,
           link: item.url,
@@ -193,8 +195,10 @@ function sendAllTorrents(task: IKeepUploadTask) {
 
 // 复制下载链接
 async function copyLinksToClipboard(task: IKeepUploadTask) {
-  const urls = task.items.map((item) => item.url).join("\n");
   try {
+    const urls = (await Promise.all(task.items.map((item) => sendMessage("getTorrentDownloadLink", {
+      site: item.site, id: item.id, title: item.title, url: item.link, link: item.url,
+    })))).join("\n");
     await navigator.clipboard.writeText(urls);
     runtimeStore.showSnakebar(t("KeepUploadTask.copySuccess", { count: task.items.length }), { color: "success" });
   } catch (e) {

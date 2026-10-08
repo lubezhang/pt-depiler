@@ -4,8 +4,9 @@ import { ref } from "vue";
 import { computedAsync } from "@vueuse/core";
 import { nanoid } from "nanoid";
 
-import { BackupFields, IBackupServerMetadata } from "@/shared/types.ts";
+import { DefaultBackupFields, IBackupServerMetadata } from "@/shared/types.ts";
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { commitSettings } from "@/options/stores/persistenceFeedback.ts";
 import {
   entityList,
   getBackupServerDefaultConfig,
@@ -40,14 +41,16 @@ async function updateStoredDownloaderConfigByDefault(type: IBackupServerMetadata
     ...(await getBackupServerDefaultConfig(type)),
     enabled: true,
     id: nanoid(),
-    backupFields: [...BackupFields],
+    backupFields: [...DefaultBackupFields],
   } as IBackupServerMetadata;
-  console.log("storedBackupServerConfig", storedBackupServerConfig.value);
+  console.log("storedBackupServerConfig");
 }
 
 async function saveStoredBackupServerConfig() {
-  await metadataStore.addBackupServer(storedBackupServerConfig.value as IBackupServerMetadata);
-  showDialog.value = false;
+  if (
+    await commitSettings(() => metadataStore.addBackupServer(storedBackupServerConfig.value as IBackupServerMetadata))
+  )
+    showDialog.value = false;
 }
 
 function resetDialog() {

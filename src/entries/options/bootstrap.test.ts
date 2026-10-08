@@ -8,7 +8,8 @@ vi.mock("./plugins/router.ts", () => ({ routerInstance: {} }));
 vi.mock("./plugins/vuetify.ts", () => ({ vuetifyInstance: {} }));
 vi.mock("./service/index.ts", () => ({
   registerLegacyServices: async () => undefined,
-  startLegacyRecovery: () => undefined,
+  startLegacyRecovery: async () => undefined,
+  startLegacyWorkers: async () => async () => undefined,
 }));
 
 import { bootstrapApp } from "./bootstrap.ts";
@@ -22,12 +23,23 @@ describe("bootstrapApp", () => {
       registerServices: async () => {
         calls.push("services");
       },
-      repairStorage: () => calls.push("repair"),
+      repairStorage: async () => {
+        calls.push("repair");
+      },
+      prepareCache: async () => {
+        calls.push("cache");
+      },
+      startWorkers: async () => {
+        calls.push("workers");
+        return async () => {
+          calls.push("stop");
+        };
+      },
       createApp: () => app as never,
       target: () => document.body,
     });
-    context.dispose();
-    expect(calls).toEqual(["transport", "services", "repair", "mount", "unmount"]);
+    await context.dispose();
+    expect(calls).toEqual(["transport", "services", "repair", "cache", "workers", "mount", "stop", "unmount"]);
   });
 
   it("失败时不挂载业务应用并渲染诊断", async () => {
@@ -39,7 +51,8 @@ describe("bootstrapApp", () => {
         report,
       }),
     ).rejects.toMatchObject({ code: "APP_BOOTSTRAP_FAILED" });
-    expect(document.body.textContent).toContain("registration failed");
+    expect(document.body.textContent).toContain("APP_BOOTSTRAP_FAILED");
+    expect(document.body.textContent).not.toContain("registration failed");
     expect(report).toHaveBeenCalledWith(expect.objectContaining({ code: "APP_BOOTSTRAP_FAILED" }));
   });
 });

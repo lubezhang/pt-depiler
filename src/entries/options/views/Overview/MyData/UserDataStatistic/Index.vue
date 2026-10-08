@@ -426,7 +426,7 @@ async function saveControl() {
     await configStore.$save();
     runtimeStore.showSnakebar(t("common.saveSuccess"), { color: "success" });
   } catch (error) {
-    console.error("[pinia] Failed to save user data statistic settings", error);
+    console.error("[pinia] Failed to save user data statistic settings");
     runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
   }
 }

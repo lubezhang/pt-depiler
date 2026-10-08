@@ -8,6 +8,7 @@ import { refDebounced } from "@vueuse/core";
 
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { commitSettings } from "@/options/stores/persistenceFeedback.ts";
 import { formValidateRules } from "@/options/utils.ts";
 import type { ISearchSolution, ISearchSolutionMetadata, TSolutionKey } from "@/shared/types.ts";
 
@@ -81,9 +82,8 @@ function removeSolution(removeSolution: ISearchSolution) {
   );
 }
 
-function saveSolutionState() {
-  metadataStore.addSearchSolution(solution.value);
-  showDialog.value = false;
+async function saveSolutionState() {
+  if (await commitSettings(() => metadataStore.addSearchSolution(solution.value))) showDialog.value = false;
 }
 
 function dialogEnter() {

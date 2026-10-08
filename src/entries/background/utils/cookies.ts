@@ -5,16 +5,16 @@
  * ptd_fetch 请求自动携带 cookie，并自动写入 set-cookie。
  */
 import { add, differenceInDays } from "date-fns";
-import { invoke } from "@tauri-apps/api/core";
 
 import { onMessage, sendMessage } from "@/messages.ts";
 import { extStorage } from "@/storage.ts";
-import { redactCookieUrl, toAppCookie, toCookieInfo, type CookieInfo } from "./cookieCore.ts";
+import { invokeIpc } from "~/extends/tauri/ipc.ts";
+import { redactCookieUrl, toAppCookie, toCookieInfo } from "./cookieCore.ts";
 
 function reportCookieFailure(message: string, error: unknown) {
-  console.error(`[cookies] ${message}`, error);
+  console.error("[cookies] ");
   void sendMessage("logger", { msg: message, level: "debug" }).catch((loggerError) => {
-    console.error(`[cookies] Failed to record cookie diagnostic: ${message}`, loggerError);
+    console.error("[cookies] Failed to record cookie diagnostic: ");
   });
 }
 
@@ -40,12 +40,12 @@ onMessage("getAllCookies", async ({ data }) => {
       domain = undefined;
     }
   }
-  const cookies = await invoke<CookieInfo[]>("get_cookies", { domain });
+  const cookies = await invokeIpc("get_cookies", { domain });
   return cookies.map(toAppCookie);
 });
 
 onMessage("setCookie", async ({ data }) => {
-  await invoke("set_cookie", { cookie: toCookieInfo(data) });
+  await invokeIpc("set_cookie", { cookie: toCookieInfo(data) });
 });
 
 /**
@@ -67,19 +67,19 @@ export async function checkAndExtendCookies(url: string): Promise<void> {
       return;
     }
 
-    const cookies = await invoke<CookieInfo[]>("get_cookies", { domain: host });
+    const cookies = await invokeIpc("get_cookies", { domain: host });
     const thresholdDays = config.triggerThreshold * 7;
 
     for (const cookie of cookies) {
       try {
-        const remainingDays = calculateRemainingDays(cookie.expirationDate);
+        const remainingDays = calculateRemainingDays(cookie.expirationDate ?? undefined);
         if (remainingDays === Infinity) {
           continue;
         }
         const shouldExtend = cookie.name.startsWith("c_secure_") || cookie.name.startsWith("remember_web_");
         if (remainingDays < thresholdDays && shouldExtend) {
           const newExpirationDate = Math.floor(add(new Date(), { months: config.extensionDuration }).getTime() / 1000);
-          await invoke("set_cookie", { cookie: { ...cookie, expirationDate: newExpirationDate } });
+          await invokeIpc("set_cookie", { cookie: { ...cookie, expirationDate: newExpirationDate } });
         }
       } catch (error) {
         reportCookieFailure(`Failed to extend cookie ${cookie.name} for url ${logUrl}`, error);

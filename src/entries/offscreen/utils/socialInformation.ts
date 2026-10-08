@@ -6,6 +6,7 @@ import type { IConfigPiniaStorageSchema } from "@/shared/types.ts";
 
 import { ptdIndexDb } from "../adapter/indexdb.ts";
 import { logger } from "../utils/logger.ts";
+import { publicSocialInformation } from "@/shared/security/social.ts";
 
 interface IGetSocialInformationOptions {
   force?: boolean;
@@ -26,7 +27,8 @@ export async function getSocialInformation(
   const socialInformationConfig = configStoreRaw.socialSiteInformation ?? {};
 
   const key = `${site}:${sid}`;
-  let stored = await (await ptdIndexDb).get("social_information", key);
+  const cached = await (await ptdIndexDb).get("social_information", key);
+  let stored = cached ? publicSocialInformation(cached) : undefined;
 
   const isExpired = stored && stored.createAt < Date.now() - 86400000 * (socialInformationConfig.cacheDay ?? 3);
   // 仅在本会话尚未因缺失字段重取过该 key 时才允许补取，避免源本身无数据时反复联网。
@@ -51,14 +53,14 @@ export async function getSocialInformation(
     logger({ msg: `getSocialInformation for ${site} with sid: ${sid}`, data: stored });
   }
 
-  return stored as ISocialInformation;
+  return publicSocialInformation(stored as ISocialInformation);
 }
 
 onMessage("getSocialInformation", async ({ data: { site, sid } }) => await getSocialInformation(site, sid));
 
 export async function setSocialInformation(site: TSupportSocialSite$1, sid: string, val: ISocialInformation) {
   const key = `${site}:${sid}`;
-  return await (await ptdIndexDb).put("social_information", val, key);
+  return await (await ptdIndexDb).put("social_information", publicSocialInformation(val), key);
 }
 
 export async function deleteSocialInformation(site: TSupportSocialSite$1, sid: string) {

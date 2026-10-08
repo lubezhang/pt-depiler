@@ -80,7 +80,7 @@ async function getSocialInformationSafely(item: ISocialRecommendationItem) {
       requireSummary: !item.summary,
     });
   } catch (error) {
-    console.warn("Failed to enrich social recommendation", item, error);
+    console.warn("Failed to enrich social recommendation");
     return undefined;
   }
 }
@@ -136,7 +136,7 @@ async function fetchPosterDataUrl(
         return poster;
       }
     } catch (error) {
-      console.warn("Failed to fetch recommendation poster", candidate, error);
+      console.warn("Failed to fetch recommendation poster");
     }
   }
 

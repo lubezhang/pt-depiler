@@ -6,6 +6,7 @@ import { useRoute, useRouter } from "vue-router";
 import { setBaseChildren } from "@/options/plugins/router.ts";
 import { useConfigStore } from "@/options/stores/config.ts";
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
+import { isStorageConflict } from "~/extends/pinia/webExtPersistence.ts";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -35,10 +36,16 @@ const showSaveButton = computed(() => {
 });
 
 async function save() {
-  await setTabRef.value?.beforeSave?.(); // 如果对应的 tab 有 afterSave 方法，则调用
-  await configStore.$save();
-  runtimeStore.showSnakebar(t("common.saveSuccess"), { color: "success" });
-  await setTabRef.value?.afterSave?.(); // 如果对应的 tab 有 afterSave 方法，则调用
+  try {
+    await setTabRef.value?.beforeSave?.();
+    await configStore.$save();
+    runtimeStore.showSnakebar(t("common.saveSuccess"), { color: "success" });
+    await setTabRef.value?.afterSave?.();
+  } catch (error) {
+    runtimeStore.showSnakebar(t(isStorageConflict(error) ? "common.saveConflict" : "common.saveFailure"), {
+      color: "error",
+    });
+  }
 }
 </script>
 

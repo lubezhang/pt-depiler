@@ -205,7 +205,7 @@ async function openSettingsDialog() {
     defaultDownloadDirectory.value = await sendMessage("getDownloadServiceDefaultDownloadDirectory", downloaderId.value);
   } catch (caught) {
     runtimeStore.showSnakebar(t("DownloadServiceManager.settings.loadDirectoryFailed"), { color: "error" });
-    console.error("[download-service-manager] Failed to load default download directory", caught);
+    console.error("[download-service-manager] Failed to load default download directory");
   } finally {
     defaultDownloadDirectoryLoading.value = false;
   }
@@ -240,7 +240,7 @@ async function saveSettings() {
     showSettingsDialog.value = false;
   } catch (caught) {
     runtimeStore.showSnakebar(t("DownloadServiceManager.settings.saveDirectoryFailed"), { color: "error" });
-    console.error("[download-service-manager] Failed to set default download directory", caught);
+    console.error("[download-service-manager] Failed to set default download directory");
   } finally {
     settingsSaving.value = false;
   }
@@ -412,7 +412,7 @@ async function saveTorrentLocation() {
     runtimeStore.showSnakebar(t("DownloadServiceManager.location.success"), { color: "success" });
   } catch (cause) {
     runtimeStore.showSnakebar(t("DownloadServiceManager.location.failed"), { color: "error" });
-    console.error("[download-service-manager] Failed to set torrent location", cause);
+    console.error("[download-service-manager] Failed to set torrent location");
   } finally {
     const pending = new Set(pendingOperations.value);
     pending.delete(torrent.id);

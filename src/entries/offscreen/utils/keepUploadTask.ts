@@ -4,6 +4,7 @@
 
 import { onMessage, sendMessage } from "@/messages.ts";
 import type { IKeepUploadTask, TKeepUploadTaskKey, TKeepUploadTaskStorageSchema } from "@/shared/types.ts";
+import { publicKeepUploadTask } from "@/shared/security/artifacts.ts";
 
 const STORAGE_KEY = "keepUploadTask" as const;
 
@@ -22,7 +23,7 @@ onMessage("getKeepUploadTasks", getKeepUploadTasks);
  */
 export async function createKeepUploadTask(task: IKeepUploadTask): Promise<void> {
   const tasks = ((await sendMessage("getExtStorage", STORAGE_KEY)) as TKeepUploadTaskStorageSchema) || {};
-  tasks[task.id] = task;
+  tasks[task.id] = publicKeepUploadTask(task);
   await sendMessage("setExtStorage", { key: STORAGE_KEY, value: tasks });
 }
 
@@ -36,7 +37,7 @@ onMessage("createKeepUploadTask", async ({ data: task }) => {
 export async function updateKeepUploadTask(task: IKeepUploadTask): Promise<void> {
   const tasks = ((await sendMessage("getExtStorage", STORAGE_KEY)) as TKeepUploadTaskStorageSchema) || {};
   if (tasks[task.id]) {
-    tasks[task.id] = task;
+    tasks[task.id] = publicKeepUploadTask(task);
     await sendMessage("setExtStorage", { key: STORAGE_KEY, value: tasks });
   }
 }

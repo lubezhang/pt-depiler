@@ -42,9 +42,7 @@ describe("Cookie 自动续期诊断", () => {
     await checkAndExtendCookies("https://tracker.test/path?token=secret");
     await Promise.resolve();
 
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to record cookie diagnostic: Failed to extend cookie c_secure_session"),
-      loggerError,
-    );
+    expect(console.error).toHaveBeenCalledWith("[cookies] Failed to record cookie diagnostic: ");
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(loggerError.message);
   });
 });

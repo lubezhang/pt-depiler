@@ -41,7 +41,7 @@ const storeBuildHash = computed<string>(() => storeVersion.buildHash || failback
 function dialogLeave() {
   configStore.version = __APP_VERSION__;
   void configStore.$save().catch((error) => {
-    console.error("[pinia] Failed to save the displayed release note version", error);
+    console.error("[pinia] Failed to save the displayed release note version");
   });
 }
 </script>

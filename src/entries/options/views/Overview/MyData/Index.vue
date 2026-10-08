@@ -35,7 +35,7 @@ const currentDate = new Date();
 
 function saveMyDataPreferences() {
   void configStore.$save().catch((error) => {
-    console.error("[pinia] Failed to save My Data preferences", error);
+    console.error("[pinia] Failed to save My Data preferences");
   });
 }
 

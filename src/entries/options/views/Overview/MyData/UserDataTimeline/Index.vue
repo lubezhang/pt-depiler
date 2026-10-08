@@ -204,7 +204,7 @@ onMounted(async () => {
   resetTimelineDataWithControl();
 
   isLoading.value = false;
-  console.debug(fixedLastUserInfo);
+  console.debug("[diagnostic] entries/options/views/Overview/MyData/UserDataTimeline/Index.vue:206");
 });
 
 function exportTimelineImg() {
@@ -230,7 +230,7 @@ async function saveControl() {
     await configStore.$save();
     runtimeStore.showSnakebar(t("common.saveSuccess"), { color: "success" });
   } catch (error) {
-    console.error("[pinia] Failed to save user data timeline settings", error);
+    console.error("[pinia] Failed to save user data timeline settings");
     runtimeStore.showSnakebar(error instanceof Error ? error.message : String(error), { color: "error" });
   }
 }

@@ -1,9 +1,11 @@
 <script lang="ts" setup>
 import { provide, ref } from "vue";
+import { cloneDeep } from "es-toolkit";
 import { useI18n } from "vue-i18n";
 import { type ISiteUserConfig, type TSiteID } from "@ptd/site";
 
 import { useMetadataStore } from "@/options/stores/metadata.ts";
+import { commitSettings } from "@/options/stores/persistenceFeedback.ts";
 
 import Editor from "./Editor.vue";
 
@@ -21,20 +23,26 @@ const storedSiteUserConfig = ref<ISiteUserConfig & { valid?: boolean }>({ valid:
 provide("storedSiteUserConfig", storedSiteUserConfig);
 
 async function patchSite() {
-  await metadataStore.addSite(props.siteId, storedSiteUserConfig.value);
-  showDialog.value = false;
+  if (await commitSettings(() => metadataStore.addSite(props.siteId, storedSiteUserConfig.value)))
+    showDialog.value = false;
 }
 
 function dialogEnter() {
   storedSiteUserConfig.value = {
     valid: false,
-    ...(metadataStore.sites[props.siteId] ?? {}),
+    ...cloneDeep(metadataStore.sites[props.siteId] ?? {}),
   };
 }
 </script>
 
 <template>
-  <v-dialog v-model="showDialog" max-width="800" scrollable @after-enter="dialogEnter">
+  <v-dialog
+    v-model="showDialog"
+    max-width="800"
+    scrollable
+    @after-enter="dialogEnter"
+    @after-leave="storedSiteUserConfig = { valid: false }"
+  >
     <v-card>
       <v-card-title class="pa-0">
         <v-toolbar color="blue-grey-darken-2">

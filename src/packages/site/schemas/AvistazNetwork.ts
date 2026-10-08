@@ -718,7 +718,7 @@ export default class AvistazNetwork extends PrivateSite {
       } else if (isAuthFailResp(apiAuth)) {
         // 检查 message 属性是否存在且为字符串
         const message = apiAuth.message.trim() || "Authorization failed";
-        console.error(`Failed to get new token: ${message}`);
+        console.error("Failed to get new token: ");
         throw new Error(`AvistaZ authorization failed: ${message}`);
       } else {
         console.error("Failed to get new token: Unexpected response format or missing required properties.");

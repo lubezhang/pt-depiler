@@ -5,6 +5,8 @@ import { backupDataToJSZipBlob } from "@ptd/backupServer/utils.ts";
 import AbstractBackupServer from "@ptd/backupServer/AbstractBackupServer.ts";
 
 import { onMessage, sendMessage } from "@/messages.ts";
+import { extStorage } from "@/storage.ts";
+import { DefaultBackupFields } from "@/shared/types.ts";
 import type { IExtensionStorageSchema, TExtensionStorageKey } from "@/storage.ts";
 import type {
   IRestoreOptions,
@@ -17,6 +19,8 @@ import type {
 
 import { logger } from "./logger.ts";
 import { ptdIndexDb } from "../adapter/indexdb.ts";
+import { redactBackup, withoutBackupKey } from "./backupRedaction.ts";
+import { publicDownloadHistory, publicKeepUploadTask, publicSearchSnapshot } from "@/shared/security/artifacts.ts";
 
 export const storageKey = [
   "config",
@@ -26,7 +30,12 @@ export const storageKey = [
   "keepUploadTask",
 ] as TExtensionStorageKey[];
 
-export async function createBackupData(backupFields: TBackupFields[] = []): Promise<IBackupData> {
+export async function createBackupData(backupFields: TBackupFields[] = DefaultBackupFields): Promise<IBackupData> {
+  const config = (await sendMessage("getExtStorage", "config")) as IConfigPiniaStorageSchema;
+  const encrypted = Boolean(config?.backup?.encryptionKey);
+  if (!encrypted && backupFields.some((field) => ["cookies", "downloadHistory", "keepUploadTask", "searchResultSnapshot"].includes(field))) {
+    throw new Error("BACKUP_ENCRYPTION_REQUIRED");
+  }
   const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
 
   const backupData: IBackupData = {};
@@ -58,13 +67,14 @@ export async function createBackupData(backupFields: TBackupFields[] = []): Prom
   backupData.manifest = {
     time: new Date().getTime(),
     version: `PT-Depiler (${__APP_VERSION__})`,
+    redactedSecrets: !encrypted,
   };
 
   logger({
     msg: `A Backup data created at ${formatDate(backupData.manifest.time!, "yyyy-MM-dd HH:mm:ss")}`,
     data: Object.keys(backupData),
   });
-  return backupData;
+  return encrypted ? withoutBackupKey(backupData) : redactBackup(backupData);
 }
 
 export async function getBackupServerInstance(backupServerId: TBackupServerKey): Promise<AbstractBackupServer<any>> {
@@ -76,7 +86,7 @@ export async function getBackupServerInstance(backupServerId: TBackupServerKey):
 
 export async function exportBackupData(
   backupServerId: string | "local",
-  backupFields: TBackupFields[] = [],
+  backupFields: TBackupFields[] = DefaultBackupFields,
 ): Promise<boolean> {
   const backupData = await createBackupData(backupFields);
   const backupFilename = `PTD_backup_${formatDate(new Date(), "yyyyMMdd'T'HHmm")}.zip`;
@@ -119,28 +129,40 @@ export async function restoreBackupData(
   const restoreDataExistFields = Object.keys(restoreData.manifest?.files ?? {});
   const restoreFields = intersection(fields, restoreDataExistFields);
 
-  // 恢复下载历史
-  if (restoreFields.includes("downloadHistory")) {
-    const db = await ptdIndexDb;
-    await db.clear("download_history");
-    for (const downloadHistoryElement of restoreData.downloadHistory) {
-      await db.put("download_history", downloadHistoryElement);
-    }
-  }
+  const bases: Partial<IExtensionStorageSchema> = {};
+  const proposed: Partial<IExtensionStorageSchema> = {};
 
   // 恢复应用持久化存储字段
   for (const field of storageKey.toReversed()) {
     if (restoreFields.includes(field as TBackupFields)) {
       let fieldData = restoreData[field] as IExtensionStorageSchema[typeof field];
       if (fieldData) {
-        if (field === "userInfo" && keepExistUserInfo) {
+        const base = await extStorage.getItem(field);
+        if (field === "userInfo" && (keepExistUserInfo || restoreData.manifest?.redactedSecrets)) {
           const userInfoStore = ((await sendMessage("getExtStorage", "userInfo")) ?? {}) as TUserInfoStorageSchema;
           fieldData = toMerged(fieldData, userInfoStore);
         }
 
-        await sendMessage("setExtStorage", { key: field, value: fieldData });
+        if (restoreData.manifest?.redactedSecrets && (field === "config" || field === "metadata")) {
+          fieldData = toMerged(base ?? {}, fieldData) as IExtensionStorageSchema[typeof field];
+        }
+
+        if (field === "keepUploadTask") fieldData = Object.fromEntries(Object.entries(fieldData).map(([id, task]) => [id, publicKeepUploadTask(task)]));
+        if (field === "searchResultSnapshot") fieldData = Object.fromEntries(Object.entries(fieldData).map(([id, snapshot]) => [id, publicSearchSnapshot(snapshot)]));
+        Object.assign(bases, { [field]: base });
+        Object.assign(proposed, { [field]: fieldData });
       }
     }
+  }
+
+  if (Object.keys(proposed).length) await extStorage.mergeBatch(bases, proposed);
+
+  if (restoreFields.includes("downloadHistory")) {
+    const histories = restoreData.downloadHistory.map(publicDownloadHistory);
+    const transaction = (await ptdIndexDb).transaction("download_history", "readwrite");
+    await transaction.store.clear();
+    for (const history of histories) await transaction.store.put(history);
+    await transaction.done;
   }
 
   // 恢复已添加站点的Cookie

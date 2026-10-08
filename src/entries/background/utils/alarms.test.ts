@@ -112,6 +112,7 @@ describe("后台定时任务失败处理", () => {
   });
 
   it("Rust 重试事件执行失败时将下载历史标记为 failed", async () => {
+    const stop = await registerSchedulerListeners();
     await handleReDownload({ ...redownload, leftInterval: 30_000 });
     mocks.sendMessage.mockImplementation((name: string) => {
       if (name === "downloadTorrent") return Promise.reject(new Error("retry failed"));
@@ -129,6 +130,7 @@ describe("后台定时任务失败处理", () => {
     await vi.runAllTicks();
 
     expect(mocks.sendMessage.mock.calls.filter(([name]) => name === "downloadTorrent")).toHaveLength(1);
+    await stop();
   });
 
   it("自动备份返回失败结果时记录诊断", async () => {
@@ -191,10 +193,8 @@ describe("后台定时任务失败处理", () => {
     await runAutoBackup();
     await Promise.resolve();
 
-    expect(console.error).toHaveBeenCalledWith(
-      "[background] Failed to record task diagnostic: Auto-backup returned an unsuccessful result",
-      loggerError,
-    );
+    expect(console.error).toHaveBeenCalledWith("[background] Failed to record task diagnostic: ");
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(loggerError.message);
   });
 
   it("自动刷新单站失败后持久化刷新时间并记录诊断", async () => {
@@ -223,19 +223,9 @@ describe("后台定时任务失败处理", () => {
     expect(loggerMessages("error")).toContain("Auto-refresh failed for site siteA");
   });
 
-  it("监听器注册失败时记录本地诊断", async () => {
+  it("监听器注册失败时拒绝启动", async () => {
     mocks.listen.mockRejectedValue(new Error("listener unavailable"));
 
-    registerSchedulerListeners();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(loggerMessages("error")).toEqual(
-      expect.arrayContaining([
-        "Failed to register auto-refresh scheduler listener",
-        "Failed to register auto-backup scheduler listener",
-        "Failed to register torrent retry scheduler listener",
-      ]),
-    );
+    await expect(registerSchedulerListeners()).rejects.toThrow("listener unavailable");
   });
 });

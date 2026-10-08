@@ -13,9 +13,10 @@
  * adapter 解码为 ArrayBuffer/Blob，保证种子文件等二进制内容不损坏。
  */
 import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from "axios";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeIpc } from "~/extends/tauri/ipc.ts";
 
 import { extStorage } from "@/storage.ts";
+import type { FetchRequest } from "~/generated/ipc.ts";
 import {
   buildRequestUrl,
   createAxiosResponse,
@@ -24,7 +25,6 @@ import {
   resolveSiteId,
   serializeRequestBody,
   toAxiosTransportError,
-  type FetchResponse,
   withCancellation,
 } from "./tauriAdapterCore.ts";
 
@@ -72,23 +72,22 @@ export function createTauriAdapter(identity?: HttpResourceIdentity): AxiosAdapte
     const serialized = await serializeRequestBody(config.data, headersToRecord(config.headers, config.auth));
     const requestId = crypto.randomUUID();
 
-    const request = invoke<FetchResponse>("ptd_fetch", {
-      req: {
-        requestId,
-        siteId: resource.resourceId,
-        resourceEndpoint: new URL(fullUrl).origin,
-        resourceKind: resource.kind,
-        url: fullUrl,
-        method: (config.method ?? "get").toLowerCase(),
-        headers: serialized.headers,
-        body: serialized.body,
-        timeout: config.timeout,
-        maxRedirects: config.maxRedirects,
-        binary,
-      },
-    }).catch((error: unknown) => Promise.reject(toAxiosTransportError(error, config)));
+    const req: FetchRequest = {
+      requestId,
+      siteId: resource.resourceId,
+      url: fullUrl,
+      method: (config.method ?? "get").toLowerCase(),
+      headers: serialized.headers,
+      body: serialized.body,
+      timeout: config.timeout,
+      maxRedirects: config.maxRedirects,
+      binary,
+    };
+    const request = invokeIpc("ptd_fetch", { req }).catch((error: unknown) =>
+      Promise.reject(toAxiosTransportError(error, config)),
+    );
     const resp = await withCancellation(request, config, () =>
-      invoke<void>("ptd_cancel_fetch", { requestId }).catch(() => undefined),
+      invokeIpc("ptd_cancel_fetch", { requestId }).catch(() => undefined),
     );
 
     return createAxiosResponse(resp, config);
