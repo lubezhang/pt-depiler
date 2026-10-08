@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "platform": "macOS",
+  "results": [
+    "initial-mount",
+    "two-webviews-preserve-distinct-fields",
+    "two-webviews-reject-same-field-conflict",
+    "dispose-unmounts-current-app",
+    "rebuild-mounts-after-recovery"
+  ],
+  "mainDestroyedAfterDisposal": true
+}

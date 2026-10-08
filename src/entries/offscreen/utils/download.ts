@@ -1,5 +1,5 @@
 import axios, { type AxiosRequestConfig } from "axios";
-import { cloneDeep, toMerged } from "es-toolkit";
+import { toMerged } from "es-toolkit";
 import { isEmpty } from "es-toolkit/compat";
 
 import {
@@ -29,12 +29,11 @@ import {
   DownloadHistoryQueries,
   type DownloadHistoryEvent,
 } from "~/application/download-history/service.ts";
-import type { Repository } from "~/domain/ports/index.ts";
 import { DownloadService } from "~/application/download-service/service.ts";
 
 import { logger } from "./logger.ts";
 import { getSiteInstance } from "./site.ts";
-import { ptdIndexDb } from "../adapter/indexdb.ts";
+import { downloadHistoryRepository } from "../adapter/downloadHistory.ts";
 import { publicDownloadHistory } from "@/shared/security/artifacts.ts";
 import { subscribeMetadataCommits } from "@/storage.ts";
 import { toAppError } from "~/application/contracts.ts";
@@ -315,46 +314,46 @@ async function downloadTorrent(downloadOption: IDownloadTorrentOption) {
   let siteInstance: Awaited<ReturnType<typeof getSiteInstance<"public">>> | null = null;
 
   try {
-  if (torrent.site) {
-    // 生成站点，并检查站点下载间隔，如果触及到站点下载间隔，则将下载任务放入到 alarms 中等待
-    siteInstance = await getSiteInstance<"public">(torrent.site);
+    if (torrent.site) {
+      // 生成站点，并检查站点下载间隔，如果触及到站点下载间隔，则将下载任务放入到 alarms 中等待
+      siteInstance = await getSiteInstance<"public">(torrent.site);
 
-    if (
-      siteInstance.downloadInterval > 0 &&
-      // 允许本地下载时忽略站点设置中的下载间隔
-      !(isDownloadToLocalFile && configStoreRaw?.download?.ignoreSiteDownloadIntervalWhenLocalDownload)
-    ) {
-      const leftInterval =
-        siteInstance.downloadInterval * 1000 - (new Date().getTime() - (lastSiteDownloadAt.get(torrent.site) ?? 0));
+      if (
+        siteInstance.downloadInterval > 0 &&
+        // 允许本地下载时忽略站点设置中的下载间隔
+        !(isDownloadToLocalFile && configStoreRaw?.download?.ignoreSiteDownloadIntervalWhenLocalDownload)
+      ) {
+        const leftInterval =
+          siteInstance.downloadInterval * 1000 - (new Date().getTime() - (lastSiteDownloadAt.get(torrent.site) ?? 0));
 
-      if (leftInterval > 0) {
-        logger({ msg: `Site ${torrent.site} download interval not reached, waiting...` });
-        downloadStatus = await setDownloadStatus(downloadId, "pending");
-        void sendMessage("reDownloadTorrent", { ...downloadOption, downloadId, leftInterval }).catch((error) => {
-          markDelayedDownloadFailed(downloadId, "Failed to schedule delayed torrent download", error);
-        });
-        return {
-          downloadId,
-          downloadStatus,
-        } as IDownloadTorrentResult;
+        if (leftInterval > 0) {
+          logger({ msg: `Site ${torrent.site} download interval not reached, waiting...` });
+          downloadStatus = await setDownloadStatus(downloadId, "pending");
+          void sendMessage("reDownloadTorrent", { ...downloadOption, downloadId, leftInterval }).catch((error) => {
+            markDelayedDownloadFailed(downloadId, "Failed to schedule delayed torrent download", error);
+          });
+          return {
+            downloadId,
+            downloadStatus,
+          } as IDownloadTorrentResult;
+        }
+
+        lastSiteDownloadAt.set(torrent.site, new Date().getTime());
       }
 
-      lastSiteDownloadAt.set(torrent.site, new Date().getTime());
-    }
+      // 添加站点配置的上传速度限制
+      if (!isDownloadToLocalFile && (siteInstance.userConfig?.uploadSpeedLimit ?? 0) > 0) {
+        addTorrentOptions.uploadSpeedLimit = siteInstance.userConfig.uploadSpeedLimit;
+      }
 
-    // 添加站点配置的上传速度限制
-    if (!isDownloadToLocalFile && (siteInstance.userConfig?.uploadSpeedLimit ?? 0) > 0) {
-      addTorrentOptions.uploadSpeedLimit = siteInstance.userConfig.uploadSpeedLimit;
+      downloadRequestConfig = toMerged(
+        downloadRequestConfig,
+        await siteInstance.getTorrentDownloadRequestConfig(torrent as ITorrent),
+      );
     }
-
-    downloadRequestConfig = toMerged(
-      downloadRequestConfig,
-      await siteInstance.getTorrentDownloadRequestConfig(torrent as ITorrent),
-    );
-  }
-  if (!downloadRequestConfig.url || downloadRequestConfig.url === "undefined") {
-    throw new Error("种子下载地址无法重建，请从站点重新搜索后下载");
-  }
+    if (!downloadRequestConfig.url || downloadRequestConfig.url === "undefined") {
+      throw new Error("种子下载地址无法重建，请从站点重新搜索后下载");
+    }
   } catch (error) {
     await setDownloadStatus(downloadId, "failed");
     return { downloadId, downloadStatus: "failed", errorMessage: getErrorMessage(error) } as IDownloadTorrentResult;
@@ -593,35 +592,6 @@ export function subscribeDownloadHistoryEvents(listener: (event: TDownloadHistor
   downloadHistoryListeners.add(listener);
   return () => downloadHistoryListeners.delete(listener);
 }
-
-const downloadHistoryRepository: Repository<TTorrentDownloadKey, ITorrentDownloadMetadata> = {
-  async clear() {
-    const database = await ptdIndexDb;
-    const count = (await database.getAll("download_history")).length;
-    await database.clear("download_history");
-    return count;
-  },
-  async delete(downloadId) {
-    const database = await ptdIndexDb;
-    if (!(await database.get("download_history", downloadId))) return false;
-    await database.delete("download_history", downloadId);
-    return true;
-  },
-  async findAll() {
-    return (await (await ptdIndexDb).getAll("download_history")).map(publicDownloadHistory);
-  },
-  async findById(downloadId) {
-    const history = await (await ptdIndexDb).get("download_history", downloadId);
-    return history ? publicDownloadHistory(history) : undefined;
-  },
-  async insert(history) {
-    // Vue 响应式代理不能写入 IndexedDB，保存前复制为普通对象。
-    return await (await ptdIndexDb).put("download_history", cloneDeep(publicDownloadHistory(history)));
-  },
-  async save(history) {
-    await (await ptdIndexDb).put("download_history", publicDownloadHistory(history));
-  },
-};
 
 const downloadHistoryPolicy = { isEnabled: isAllowedSaveDownloadHistory };
 const downloadHistoryEvents = {

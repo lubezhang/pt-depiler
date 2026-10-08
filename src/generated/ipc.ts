@@ -37,6 +37,25 @@ export interface IpcCommandMap {
   set_ext_storage: { input: { key: string; value: unknown }; output: void };
   merge_ext_storage: { input: { key: string; base: unknown; value: unknown }; output: unknown };
   merge_ext_storage_batch: { input: { base: unknown; value: unknown }; output: unknown };
+  get_storage_status: { input: Record<string, never>; output: unknown };
+  get_cache_snapshot: { input: Record<string, never>; output: unknown };
+  reconcile_storage_commit: { input: Record<string, never>; output: boolean };
+  import_download_history: { input: { histories: Array<unknown> }; output: boolean };
+  list_download_history: { input: Record<string, never>; output: Array<unknown> };
+  get_download_history: { input: { id: number }; output: unknown | null };
+  insert_download_history: { input: { history: unknown }; output: number };
+  save_download_history_if_unchanged: { input: { id: number; base: unknown; history: unknown }; output: boolean };
+  delete_download_history: { input: { id: number }; output: boolean };
+  clear_download_history: { input: Record<string, never>; output: number };
+  replace_download_history: { input: { histories: Array<unknown> }; output: void };
   download_to_local: { input: { req: DownloadRequest }; output: string };
   schedule_redownload: { input: { downloadId: string; delaySecs: number }; output: void };
+  ensure_periodic_tasks: { input: Record<string, never>; output: void };
+  claim_due_task: { input: { owner: string }; output: unknown | null };
+  renew_task: { input: { taskId: string; owner: string }; output: boolean };
+  finish_task: { input: { taskId: string; owner: string; outcome: string }; output: void };
+  release_tasks: { input: { owner: string }; output: void };
+  list_task_status: { input: Record<string, never>; output: Array<unknown> };
+  request_task_cancel: { input: { taskId: string }; output: boolean };
+  resolve_task: { input: { taskId: string; action: string }; output: void };
 }

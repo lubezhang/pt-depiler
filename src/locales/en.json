@@ -629,6 +629,7 @@
       "download": "Download",
       "search-entity": "@:common.search",
       "social-information": "Social Rating",
+      "tasks": "Tasks",
       "ui": "Option UI",
       "user-info": "UserInfo"
     },

@@ -142,7 +142,12 @@ export interface ProtocolMap {
   clearSocialInformationCache(): void;
 
   // 2.6 备份/恢复 ( utils/backup )
-  exportBackupData(data: { backupServerId: string | "local"; backupFields: TBackupFields[] }): boolean;
+  exportBackupData(data: {
+    backupServerId: string | "local";
+    backupFields: TBackupFields[];
+    backupFilename?: string;
+  }): boolean;
+  confirmBackupCompletion(data: { backupServerId: string; backupFilename: string }): boolean;
   getBackupHistory(data: string): IBackupFileInfo[];
   deleteBackupHistory(data: { backupServerId: string; path: string }): boolean;
   restoreBackupData(data: { restoreData: IBackupData; restoreOptions?: IRestoreOptions }): boolean;
@@ -204,6 +209,7 @@ export const protocolNames = [
   "getSocialRecommendationItem",
   "clearSocialInformationCache",
   "exportBackupData",
+  "confirmBackupCompletion",
   "getBackupHistory",
   "deleteBackupHistory",
   "restoreBackupData",

@@ -9,6 +9,7 @@ export interface Repository<Key, Entity> {
   findAll(): Promise<readonly Entity[]>;
   insert(entity: Entity): Promise<Key>;
   save(entity: Entity): Promise<void>;
+  saveIfUnchanged?(base: Entity, entity: Entity): Promise<void>;
   delete(key: Key): Promise<boolean>;
   clear(): Promise<number>;
 }
@@ -150,7 +151,8 @@ export class InMemoryHttpClient implements HttpClient {
 
   async request<T>(request: HttpRequest): Promise<HttpResponse<T>> {
     const response = this.responses.get(this.key(request));
-    if (!response) throw new Error(`No in-memory response registered for ${request.resourceId} ${request.method} ${request.path}`);
+    if (!response)
+      throw new Error(`No in-memory response registered for ${request.resourceId} ${request.method} ${request.path}`);
     return response as HttpResponse<T>;
   }
 
@@ -166,7 +168,11 @@ export class SystemClock implements Clock {
 }
 
 export class InMemoryLogger implements Logger {
-  readonly records: Array<{ level: "debug" | "error" | "info" | "warn"; message: string; context?: Record<string, unknown> }> = [];
+  readonly records: Array<{
+    level: "debug" | "error" | "info" | "warn";
+    message: string;
+    context?: Record<string, unknown>;
+  }> = [];
 
   debug(message: string, context?: Record<string, unknown>): void {
     this.records.push({ level: "debug", message, context });

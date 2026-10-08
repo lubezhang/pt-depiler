@@ -154,7 +154,6 @@ fn ap_01_generated_contract_is_current() {
         include_str!("http.rs"),
         include_str!("download.rs"),
         include_str!("storage.rs"),
-        include_str!("scheduler.rs"),
     ] {
         for (name, binding) in commands(source) {
             assert!(

@@ -1,5 +1,22 @@
 use tauri::{Listener, Manager, WebviewUrl, WebviewWindowBuilder};
 
+#[cfg(target_os = "macos")]
+pub(crate) fn isolated_webview_identifier() -> Option<[u8; 16]> {
+    use sha2::{Digest, Sha256};
+    let directory = std::env::var_os("PTD_E2E_DATA_DIR")?;
+    if !std::path::Path::new(&directory).is_absolute() {
+        return None;
+    }
+    let digest = Sha256::digest(
+        std::path::Path::new(&directory)
+            .as_os_str()
+            .as_encoded_bytes(),
+    );
+    let mut identifier = [0u8; 16];
+    identifier.copy_from_slice(&digest[..16]);
+    Some(identifier)
+}
+
 pub(crate) fn enabled() -> bool {
     cfg!(debug_assertions)
         && std::env::var("PTD_STAGE_A_GUI").as_deref() == Ok("1")
@@ -22,14 +39,21 @@ pub(crate) fn install(app: &tauri::App) -> tauri::Result<()> {
     let handle = app.handle().clone();
     app.listen("stage-a:create-peer", move |_| {
         if handle.get_webview_window("stage-a-peer").is_none() {
-            WebviewWindowBuilder::new(
+            let builder = WebviewWindowBuilder::new(
                 &handle,
                 "stage-a-peer",
                 WebviewUrl::App("index.html?stage-a-peer=1".into()),
-            )
-            .title("Stage A isolated peer")
-            .build()
-            .expect("create acceptance peer");
+            );
+            #[cfg(target_os = "macos")]
+            let builder = if let Some(identifier) = isolated_webview_identifier() {
+                builder.data_store_identifier(identifier)
+            } else {
+                builder
+            };
+            builder
+                .title("Stage A isolated peer")
+                .build()
+                .expect("create acceptance peer");
         }
     });
     let directory = std::path::PathBuf::from(std::env::var_os("PTD_E2E_DATA_DIR").unwrap());

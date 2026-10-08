@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "domains": [
+    {
+      "domain": "__metadataRevision",
+      "sourceVersion": 0,
+      "targetVersion": 1,
+      "cleanupPending": false
+    },
+    {
+      "domain": "config",
+      "sourceVersion": 0,
+      "targetVersion": 1,
+      "cleanupPending": false
+    },
+    {
+      "domain": "keepUploadTask",
+      "sourceVersion": 0,
+      "targetVersion": 1,
+      "cleanupPending": false
+    },
+    {
+      "domain": "metadata",
+      "sourceVersion": 0,
+      "targetVersion": 1,
+      "cleanupPending": false
+    },
+    {
+      "domain": "searchResultSnapshot",
+      "sourceVersion": 0,
+      "targetVersion": 1,
+      "cleanupPending": false
+    },
+    {
+      "domain": "userInfo",
+      "sourceVersion": 0,
+      "targetVersion": 1,
+      "cleanupPending": false
+    }
+  ],
+  "allSixDomainsImportedAndCleaned": true,
+  "oldJsonContainsOnlyUnrelatedField": true,
+  "backupKeyPreserved": true,
+  "metadataRevisionPreserved": true,
+  "databaseOwnerOnly": true
+}

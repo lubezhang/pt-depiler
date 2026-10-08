@@ -18,9 +18,9 @@ import type {
 } from "@/shared/types.ts";
 
 import { logger } from "./logger.ts";
-import { ptdIndexDb } from "../adapter/indexdb.ts";
 import { redactBackup, withoutBackupKey } from "./backupRedaction.ts";
 import { publicDownloadHistory, publicKeepUploadTask, publicSearchSnapshot } from "@/shared/security/artifacts.ts";
+import { invokeIpc } from "~/extends/tauri/ipc.ts";
 
 export const storageKey = [
   "config",
@@ -33,7 +33,12 @@ export const storageKey = [
 export async function createBackupData(backupFields: TBackupFields[] = DefaultBackupFields): Promise<IBackupData> {
   const config = (await sendMessage("getExtStorage", "config")) as IConfigPiniaStorageSchema;
   const encrypted = Boolean(config?.backup?.encryptionKey);
-  if (!encrypted && backupFields.some((field) => ["cookies", "downloadHistory", "keepUploadTask", "searchResultSnapshot"].includes(field))) {
+  if (
+    !encrypted &&
+    backupFields.some((field) =>
+      ["cookies", "downloadHistory", "keepUploadTask", "searchResultSnapshot"].includes(field),
+    )
+  ) {
     throw new Error("BACKUP_ENCRYPTION_REQUIRED");
   }
   const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
@@ -61,7 +66,7 @@ export async function createBackupData(backupFields: TBackupFields[] = DefaultBa
 
   // 备份下载历史
   if (backupFields.includes("downloadHistory")) {
-    backupData["downloadHistory"] = await (await ptdIndexDb).getAll("download_history");
+    backupData["downloadHistory"] = (await invokeIpc("list_download_history", {})) as IBackupData["downloadHistory"];
   }
 
   backupData.manifest = {
@@ -84,12 +89,25 @@ export async function getBackupServerInstance(backupServerId: TBackupServerKey):
   return await getBackupServer(backupServerConfig);
 }
 
+async function recordBackupSuccess(backupServerId: string): Promise<void> {
+  const metadata = await extStorage.getItem("metadata");
+  if (!metadata?.backupServers?.[backupServerId]) throw new Error("Backup server is unavailable");
+  metadata.backupServers[backupServerId].lastBackupAt = Math.max(
+    metadata.backupServers[backupServerId].lastBackupAt ?? 0,
+    Date.now(),
+  );
+  await extStorage.setItem("metadata", metadata);
+}
+
 export async function exportBackupData(
   backupServerId: string | "local",
   backupFields: TBackupFields[] = DefaultBackupFields,
+  backupFilename = `PTD_backup_${formatDate(new Date(), "yyyyMMdd'T'HHmm")}.zip`,
 ): Promise<boolean> {
   const backupData = await createBackupData(backupFields);
-  const backupFilename = `PTD_backup_${formatDate(new Date(), "yyyyMMdd'T'HHmm")}.zip`;
+  if (!/^PTD_backup_(?:task_[0-9]+|[0-9]{8}T[0-9]{4})\.zip$/.test(backupFilename)) {
+    throw new Error("Invalid backup filename");
+  }
 
   const configStore = (await sendMessage("getExtStorage", "config")) as IConfigPiniaStorageSchema;
   const encryptionKey = configStore?.backup?.encryptionKey ?? "";
@@ -107,17 +125,27 @@ export async function exportBackupData(
 
     // 更新最后一次备份时间
     if (backupStatus) {
-      const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
-      metadataStore.backupServers[backupServerId].lastBackupAt = new Date().getTime();
-      await sendMessage("setExtStorage", { key: "metadata", value: metadataStore });
+      await recordBackupSuccess(backupServerId);
     }
 
     return backupStatus;
   }
 }
 
-onMessage("exportBackupData", async ({ data: { backupServerId, backupFields } }) => {
-  return await exportBackupData(backupServerId, backupFields);
+onMessage("exportBackupData", async ({ data: { backupServerId, backupFields, backupFilename } }) => {
+  return await exportBackupData(backupServerId, backupFields, backupFilename);
+});
+
+export async function confirmBackupCompletion(backupServerId: string, backupFilename: string): Promise<boolean> {
+  if (!/^PTD_backup_task_[0-9]+\.zip$/.test(backupFilename)) throw new Error("Invalid task backup filename");
+  const server = await getBackupServerInstance(backupServerId);
+  if (!(await server.list()).some((file) => file.filename === backupFilename)) return false;
+  await recordBackupSuccess(backupServerId);
+  return true;
+}
+
+onMessage("confirmBackupCompletion", async ({ data: { backupServerId, backupFilename } }) => {
+  return await confirmBackupCompletion(backupServerId, backupFilename);
 });
 
 export async function restoreBackupData(
@@ -147,8 +175,14 @@ export async function restoreBackupData(
           fieldData = toMerged(base ?? {}, fieldData) as IExtensionStorageSchema[typeof field];
         }
 
-        if (field === "keepUploadTask") fieldData = Object.fromEntries(Object.entries(fieldData).map(([id, task]) => [id, publicKeepUploadTask(task)]));
-        if (field === "searchResultSnapshot") fieldData = Object.fromEntries(Object.entries(fieldData).map(([id, snapshot]) => [id, publicSearchSnapshot(snapshot)]));
+        if (field === "keepUploadTask")
+          fieldData = Object.fromEntries(
+            Object.entries(fieldData).map(([id, task]) => [id, publicKeepUploadTask(task)]),
+          );
+        if (field === "searchResultSnapshot")
+          fieldData = Object.fromEntries(
+            Object.entries(fieldData).map(([id, snapshot]) => [id, publicSearchSnapshot(snapshot)]),
+          );
         Object.assign(bases, { [field]: base });
         Object.assign(proposed, { [field]: fieldData });
       }
@@ -159,10 +193,7 @@ export async function restoreBackupData(
 
   if (restoreFields.includes("downloadHistory")) {
     const histories = restoreData.downloadHistory.map(publicDownloadHistory);
-    const transaction = (await ptdIndexDb).transaction("download_history", "readwrite");
-    await transaction.store.clear();
-    for (const history of histories) await transaction.store.put(history);
-    await transaction.done;
+    await invokeIpc("replace_download_history", { histories });
   }
 
   // 恢复已添加站点的Cookie

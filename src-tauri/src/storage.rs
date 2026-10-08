@@ -1,15 +1,57 @@
+#[cfg(test)]
 use std::fs::{self, File};
+#[cfg(test)]
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{error::AppErrorDto, state::AppState};
+use crate::{error::AppErrorDto, repository::Repository, state::AppState};
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
+#[cfg(test)]
 use tempfile::NamedTempFile;
 
+#[cfg(test)]
 const STORE_FILE: &str = "storage.json";
-static STORAGE_LOCK: Mutex<()> = Mutex::new(());
+static REPOSITORY: OnceLock<Mutex<Repository>> = OnceLock::new();
+
+fn data_directory(app: &AppHandle) -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(directory) = std::env::var_os("PTD_E2E_DATA_DIR") {
+        let path = PathBuf::from(directory);
+        if !path.is_absolute() {
+            return Err("STORAGE_INVALID_DATA_DIR:storage_path".to_string());
+        }
+        return Ok(path);
+    }
+    app.path()
+        .app_data_dir()
+        .map_err(|_| "STORAGE_UNAVAILABLE:storage_path".to_string())
+}
+
+pub fn initialize(app: &AppHandle) -> Result<(), String> {
+    let mut repository = Repository::open(&data_directory(app)?)?;
+    repository.initialize_tasks()?;
+    REPOSITORY
+        .set(Mutex::new(repository))
+        .map_err(|_| "STORAGE_UNAVAILABLE:already_initialized".to_string())
+}
+
+fn now_ms() -> Result<u64, String> {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "STORAGE_UNAVAILABLE:clock")?;
+    u64::try_from(elapsed.as_millis()).map_err(|_| "STORAGE_UNAVAILABLE:clock".into())
+}
+
+fn repository() -> Result<&'static Mutex<Repository>, String> {
+    REPOSITORY
+        .get()
+        .ok_or_else(|| "STORAGE_UNAVAILABLE:not_initialized".to_string())
+}
 
 fn ensure_storage_window(window: &WebviewWindow) -> Result<(), String> {
     #[cfg(debug_assertions)]
@@ -30,21 +72,7 @@ fn root_key(key: &str) -> bool {
     matches!(key, "config" | "metadata")
 }
 
-fn storage_path(app: &AppHandle) -> Result<PathBuf, String> {
-    #[cfg(debug_assertions)]
-    if let Some(directory) = std::env::var_os("PTD_E2E_DATA_DIR") {
-        let path = PathBuf::from(directory);
-        if !path.is_absolute() {
-            return Err("STORAGE_INVALID_DATA_DIR:storage_path".to_string());
-        }
-        return Ok(path.join(STORE_FILE));
-    }
-    app.path()
-        .app_data_dir()
-        .map(|directory| directory.join(STORE_FILE))
-        .map_err(|_| "STORAGE_UNAVAILABLE:storage_path".to_string())
-}
-
+#[cfg(test)]
 fn read_document(path: &Path) -> Result<Map<String, Value>, String> {
     let contents = match fs::read(path) {
         Ok(contents) => contents,
@@ -59,6 +87,7 @@ fn read_document(path: &Path) -> Result<Map<String, Value>, String> {
         .ok_or_else(|| "STORAGE_CORRUPT:read".to_string())
 }
 
+#[cfg(test)]
 fn write_document(path: &Path, document: &Map<String, Value>) -> Result<(), String> {
     let parent = path.parent().ok_or("STORAGE_UNAVAILABLE:write")?;
     fs::create_dir_all(parent).map_err(|_| "STORAGE_UNAVAILABLE:write".to_string())?;
@@ -78,6 +107,7 @@ fn write_document(path: &Path, document: &Map<String, Value>) -> Result<(), Stri
 }
 
 #[cfg(unix)]
+#[cfg(test)]
 fn sync_directory(path: &Path) -> Result<(), String> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
@@ -85,6 +115,7 @@ fn sync_directory(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(not(unix))]
+#[cfg(test)]
 fn sync_directory(_path: &Path) -> Result<(), String> {
     Ok(())
 }
@@ -143,12 +174,11 @@ pub fn read_key(app: &AppHandle, key: &str) -> Result<Value, String> {
     if !valid_key(key) {
         return Err("STORAGE_INVALID_KEY:get_ext_storage".to_string());
     }
-    let _guard = STORAGE_LOCK
+    let _ = app;
+    let guard = repository()?
         .lock()
         .map_err(|_| "STORAGE_UNAVAILABLE:lock".to_string())?;
-    Ok(read_document(&storage_path(app)?)?
-        .remove(key)
-        .unwrap_or(Value::Null))
+    Ok(guard.read(key))
 }
 
 #[tauri::command]
@@ -220,6 +250,7 @@ pub(crate) fn site_hosts(metadata: Option<&Value>) -> Vec<String> {
     hosts
 }
 
+#[cfg(test)]
 fn commit_document(
     path: &Path,
     previous: &Map<String, Value>,
@@ -243,15 +274,19 @@ pub async fn merge_ext_storage_batch(
 ) -> Result<Value, AppErrorDto> {
     let result = (|| {
         ensure_storage_window(&window)?;
-        let _guard = STORAGE_LOCK
+        let mut repository = repository()?
             .lock()
             .map_err(|_| "STORAGE_UNAVAILABLE:lock")?;
-        let path = storage_path(&app)?;
-        let document = read_document(&path)?;
+        let _ = app;
+        let document = repository.records().clone();
         let base = base.as_object().ok_or("STORAGE_INVALID_INPUT:base")?;
         let value = value.as_object().ok_or("STORAGE_INVALID_INPUT:value")?;
         let merged = merged_batch(&document, base, value)?;
-        commit_document(&path, &document, &merged, state.inner())?;
+        state.commit_with_cookie_cleanup(
+            &site_hosts(document.get("metadata")),
+            &site_hosts(merged.get("metadata")),
+            || repository.commit(merged.clone()),
+        )?;
         Ok(Value::Object(
             value
                 .keys()
@@ -274,13 +309,13 @@ pub async fn set_ext_storage(
         if !valid_key(&key) || root_key(&key) {
             return Err("STORAGE_CONDITIONAL_WRITE_REQUIRED:set_ext_storage".to_string());
         }
-        let _guard = STORAGE_LOCK
+        let mut repository = repository()?
             .lock()
             .map_err(|_| "STORAGE_UNAVAILABLE:lock".to_string())?;
-        let path = storage_path(&app)?;
-        let mut document = read_document(&path)?;
+        let _ = app;
+        let mut document = repository.records().clone();
         document.insert(key, value);
-        write_document(&path, &document)
+        repository.commit(document)
     })();
     result.map_err(|error| AppErrorDto::command(&error, "set_ext_storage"))
 }
@@ -299,20 +334,318 @@ pub async fn merge_ext_storage(
         if !root_key(&key) {
             return Err("STORAGE_INVALID_KEY:merge_ext_storage".to_string());
         }
-        let _guard = STORAGE_LOCK
+        let mut repository = repository()?
             .lock()
             .map_err(|_| "STORAGE_UNAVAILABLE:lock".to_string())?;
-        let path = storage_path(&app)?;
-        let document = read_document(&path)?;
+        let _ = app;
+        let document = repository.records().clone();
         let merged = merged_batch(
             &document,
             &Map::from_iter([(key.clone(), base)]),
             &Map::from_iter([(key.clone(), value)]),
         )?;
-        commit_document(&path, &document, &merged, state.inner())?;
+        state.commit_with_cookie_cleanup(
+            &site_hosts(document.get("metadata")),
+            &site_hosts(merged.get("metadata")),
+            || repository.commit(merged.clone()),
+        )?;
         Ok(merged[&key].clone())
     })();
     result.map_err(|error| AppErrorDto::command(&error, "merge_ext_storage"))
+}
+
+#[tauri::command]
+pub async fn get_storage_status(window: WebviewWindow) -> Result<Value, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        let repository = repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?;
+        Ok(repository.status())
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "get_storage_status"))
+}
+
+#[tauri::command]
+pub async fn get_cache_snapshot(window: WebviewWindow) -> Result<Value, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        let repository = repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?;
+        Ok(serde_json::json!({
+            "revision": repository.revision(),
+            "config": repository.read("config"),
+            "metadata": repository.read("metadata"),
+        }))
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "get_cache_snapshot"))
+}
+
+#[tauri::command]
+pub async fn reconcile_storage_commit(window: WebviewWindow) -> Result<bool, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        let mut repository = repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?;
+        repository.reconcile()
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "reconcile_storage_commit"))
+}
+
+#[tauri::command]
+pub async fn import_download_history(
+    histories: Vec<Value>,
+    window: WebviewWindow,
+) -> Result<bool, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        #[cfg(debug_assertions)]
+        if crate::stage_a_acceptance::enabled()
+            && std::env::var("PTD_STAGE_B_MIGRATION_GUI").as_deref() == Ok("retry-fail")
+        {
+            return Err("STORAGE_UNAVAILABLE:acceptance_import_failure".into());
+        }
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .import_download_history(histories)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "import_download_history"))
+}
+
+#[tauri::command]
+pub async fn list_download_history(window: WebviewWindow) -> Result<Vec<Value>, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .list_download_history()
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "list_download_history"))
+}
+
+#[tauri::command]
+pub async fn get_download_history(
+    id: u64,
+    window: WebviewWindow,
+) -> Result<Option<Value>, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .get_download_history(id)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "get_download_history"))
+}
+
+#[tauri::command]
+pub async fn insert_download_history(
+    history: Value,
+    window: WebviewWindow,
+) -> Result<u64, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .insert_download_history(history)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "insert_download_history"))
+}
+
+#[tauri::command]
+pub async fn save_download_history_if_unchanged(
+    id: u64,
+    base: Value,
+    history: Value,
+    window: WebviewWindow,
+) -> Result<bool, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .save_download_history_if_unchanged(id, base, history)
+    })();
+    result
+        .map_err(|error: String| AppErrorDto::command(&error, "save_download_history_if_unchanged"))
+}
+
+#[tauri::command]
+pub async fn delete_download_history(id: u64, window: WebviewWindow) -> Result<bool, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .delete_download_history(id)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "delete_download_history"))
+}
+
+#[tauri::command]
+pub async fn clear_download_history(window: WebviewWindow) -> Result<usize, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .clear_download_history()
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "clear_download_history"))
+}
+
+#[tauri::command]
+pub async fn replace_download_history(
+    histories: Vec<Value>,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .replace_download_history(histories)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "replace_download_history"))
+}
+
+#[tauri::command]
+pub async fn schedule_redownload(
+    download_id: String,
+    delay_secs: u64,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        let id = download_id
+            .parse::<u64>()
+            .map_err(|_| "STORAGE_INVALID_INPUT:download_id")?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .enqueue_redownload(id, delay_secs, now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "schedule_redownload"))
+}
+
+#[tauri::command]
+pub async fn ensure_periodic_tasks(window: WebviewWindow) -> Result<(), AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .ensure_periodic_tasks(now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "ensure_periodic_tasks"))
+}
+
+#[tauri::command]
+pub async fn claim_due_task(
+    owner: String,
+    window: WebviewWindow,
+) -> Result<Option<Value>, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .claim_due(&owner, now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "claim_due_task"))
+}
+
+#[tauri::command]
+pub async fn renew_task(
+    task_id: String,
+    owner: String,
+    window: WebviewWindow,
+) -> Result<bool, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .renew_task(&task_id, &owner, now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "renew_task"))
+}
+
+#[tauri::command]
+pub async fn finish_task(
+    task_id: String,
+    owner: String,
+    outcome: String,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .finish_task(&task_id, &owner, &outcome, now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "finish_task"))
+}
+
+#[tauri::command]
+pub async fn release_tasks(owner: String, window: WebviewWindow) -> Result<(), AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .release_owner(&owner, now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "release_tasks"))
+}
+
+#[tauri::command]
+pub async fn list_task_status(window: WebviewWindow) -> Result<Vec<Value>, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .task_status()
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "list_task_status"))
+}
+
+#[tauri::command]
+pub async fn request_task_cancel(
+    task_id: String,
+    window: WebviewWindow,
+) -> Result<bool, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .request_task_cancel(&task_id, now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "request_task_cancel"))
+}
+
+#[tauri::command]
+pub async fn resolve_task(
+    task_id: String,
+    action: String,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .resolve_task(&task_id, &action, now_ms()?)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "resolve_task"))
 }
 
 #[cfg(test)]

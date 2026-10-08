@@ -109,6 +109,7 @@ declare module "pinia" {
 
     $save(): Promise<void>;
     $onReady(callback?: () => void): Promise<void>;
+    $adoptCommitted(snapshot: unknown): Promise<boolean>;
   }
 }
 
@@ -193,7 +194,7 @@ export function piniaWebExtPersistencePlugin(context: PiniaPluginContext) {
         try {
           onSaveError?.(saveError);
         } catch {
-          console.error("[pinia] Failed to report save error for store \"\"");
+          console.error('[pinia] Failed to report save error for store ""');
         }
         throw saveError;
       }
@@ -202,9 +203,18 @@ export function piniaWebExtPersistencePlugin(context: PiniaPluginContext) {
     await save;
   };
 
+  const $adoptCommitted = async (snapshot: unknown): Promise<boolean> => {
+    await $onReady();
+    await saveQueue;
+    if (JSON.stringify(store.$state) !== JSON.stringify(committed)) return false;
+    committed = JSON.parse(JSON.stringify(snapshot));
+    replaceState(committed);
+    return true;
+  };
+
   const reportAutoSaveError = (error: unknown) => {
     const saveError = error instanceof PiniaPersistenceSaveError ? error : new PiniaPersistenceSaveError(key, error);
-    if (!onSaveError) console.error("[pinia] Failed to automatically save store \"\"");
+    if (!onSaveError) console.error('[pinia] Failed to automatically save store ""');
   };
 
   if (autoSaveType && Array.isArray(autoSaveType)) {
@@ -220,5 +230,5 @@ export function piniaWebExtPersistencePlugin(context: PiniaPluginContext) {
     originalDispose.call(store);
   };
 
-  return { $dispose, $save, $ready, $onReady };
+  return { $dispose, $save, $ready, $onReady, $adoptCommitted };
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { onMounted, ref, shallowRef, computed } from "vue";
+import { onMounted, onUnmounted, ref, shallowRef, computed } from "vue";
 import { useDisplay, type DataTableHeader } from "vuetify";
 
 import { sendMessage } from "@/messages.ts";
@@ -89,7 +89,9 @@ function viewDownloadDetail(history: ITorrentDownloadMetadata) {
 
 onMounted(() => {
   throttleLoadDownloadHistory();
+  window.addEventListener("focus", throttleLoadDownloadHistory);
 });
+onUnmounted(() => window.removeEventListener("focus", throttleLoadDownloadHistory));
 </script>
 
 <template>

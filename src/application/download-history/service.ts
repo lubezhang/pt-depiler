@@ -46,7 +46,10 @@ export class DownloadHistoryCommands<Key, Status extends string, Record extends 
     return downloadId;
   }
 
-  async patch(downloadId: Key, patch: Partial<Record>): Promise<{ changed: boolean; history?: Record; stored: boolean }> {
+  async patch(
+    downloadId: Key,
+    patch: Partial<Record>,
+  ): Promise<{ changed: boolean; history?: Record; stored: boolean }> {
     if (!(await this.policy.isEnabled())) return { changed: false, stored: false };
     const current = await this.repository.findById(downloadId);
     if (!current) return { changed: false, stored: true };
@@ -54,7 +57,8 @@ export class DownloadHistoryCommands<Key, Status extends string, Record extends 
     if (Object.keys(patch).every((key) => Object.is(current[key as keyof Record], history[key as keyof Record]))) {
       return { changed: false, history: current, stored: true };
     }
-    await this.repository.save(history);
+    if (this.repository.saveIfUnchanged) await this.repository.saveIfUnchanged(current, history);
+    else await this.repository.save(history);
     this.events.publish({ type: "DownloadHistoryUpdated", history });
     return { changed: true, history, stored: true };
   }
@@ -69,7 +73,8 @@ export class DownloadHistoryCommands<Key, Status extends string, Record extends 
     // Legacy download attempts persist the pending checkpoint even when the
     // value is unchanged. Keep that write for recovery compatibility, while
     // avoiding duplicate UI events for an idempotent status transition.
-    await this.repository.save(history);
+    if (this.repository.saveIfUnchanged) await this.repository.saveIfUnchanged(current, history);
+    else await this.repository.save(history);
     if (changed) {
       this.events.publish({ type: "DownloadHistoryUpdated", history });
       this.events.publish({ type: "DownloadStatusChanged", downloadId, history, status });

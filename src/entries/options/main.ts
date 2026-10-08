@@ -2,13 +2,19 @@ import { bootstrapApp, disposeActiveApp } from "./bootstrap.ts";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const acceptance = import.meta.env.DEV && import.meta.env.VITE_STAGE_A_GUI === "1";
+const migrationAcceptance = acceptance && Boolean(import.meta.env.VITE_STAGE_B_MIGRATION_GUI);
 const peer = acceptance && new URLSearchParams(location.search).has("stage-a-peer");
-const app = peer
-  ? import("~/acceptance/stage-a-gui.ts").then(async ({ runStageAPeer }) => {
-      await runStageAPeer();
+const app = migrationAcceptance
+  ? import("~/acceptance/stage-b-migration-gui.ts").then(async ({ runStageBMigrationMain, runStageBMigrationPeer }) => {
+      if (peer) await runStageBMigrationPeer();
+      else await runStageBMigrationMain();
     })
-  : bootstrapApp();
-if (acceptance && !peer) {
+  : peer
+    ? import("~/acceptance/stage-a-gui.ts").then(async ({ runStageAPeer }) => {
+        await runStageAPeer();
+      })
+    : bootstrapApp();
+if (acceptance && !peer && !migrationAcceptance) {
   void app.then(async () => {
     const { runStageAMain } = await import("~/acceptance/stage-a-gui.ts");
     await runStageAMain();

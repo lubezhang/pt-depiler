@@ -50,10 +50,15 @@ export const tableCustomFilter = useTableCustomFilter({
 
 // 使用 setTimeout 监听下载状态变化
 const watchingMap = reactive<Record<TTorrentDownloadKey, number>>({});
+let loadVersion = 0;
 function watchDownloadHistory(downloadHistoryId: TTorrentDownloadKey) {
   watchingMap[downloadHistoryId] = setTimeout(async () => {
     const history = await sendMessage("getDownloadHistoryById", downloadHistoryId);
-    downloadHistory.value[downloadHistoryId] = history;
+    if (!history) {
+      delete watchingMap[downloadHistoryId];
+      return;
+    }
+    downloadHistory.value = { ...downloadHistory.value, [downloadHistoryId]: history };
     if (history.downloadStatus == "downloading" || history.downloadStatus == "pending") {
       watchDownloadHistory(downloadHistoryId);
     } else {
@@ -63,6 +68,7 @@ function watchDownloadHistory(downloadHistoryId: TTorrentDownloadKey) {
 }
 
 function loadDownloadHistory() {
+  const version = ++loadVersion;
   // 首先清除所有的下载状态监听
   for (const key of Object.keys(watchingMap)) {
     clearTimeout(watchingMap[key as unknown as number]);
@@ -70,13 +76,16 @@ function loadDownloadHistory() {
   }
 
   sendMessage("getDownloadHistory", undefined).then((history: ITorrentDownloadMetadata[]) => {
-    downloadHistory.value = {}; // 清空目前的下载记录
+    if (version !== loadVersion) return;
+    const next: Record<TTorrentDownloadKey, ITorrentDownloadMetadata> = {};
     history.forEach((item) => {
-      downloadHistory.value[item.id!] = item;
+      if (item.id === undefined) return;
+      next[item.id] = item;
       if (item.downloadStatus == "downloading" || item.downloadStatus == "pending") {
-        watchDownloadHistory(item.id!);
+        watchDownloadHistory(item.id);
       }
     });
+    downloadHistory.value = next;
     tableCustomFilter.buildAdvanceItemPropsFn();
   });
 }

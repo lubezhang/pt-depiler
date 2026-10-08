@@ -1,0 +1,19 @@
+{
+  "platform": "macOS",
+  "date": "2026-10-08",
+  "environment": "debug, dedicated Vite origin and isolated application data directory",
+  "results": {
+    "isolatedSourceInitiallyEmpty": true,
+    "legacyHistorySeeded": 1,
+    "failedImportPreservedSource": true,
+    "failedImportLeftMarkerAbsent": true,
+    "concurrentWindowSourceCounts": [1, 0],
+    "mainWindowImportedRecords": 1,
+    "secondaryWindowDidNotImportEmptySource": true,
+    "legacySourceClearedAfterCommit": true,
+    "defaultDebugSourceCountBeforeAndAfter": 6,
+    "legacySqliteBlockedStartup": true,
+    "legacySqlitePreserved": true,
+    "sqliteTargetFileCreated": false
+  }
+}

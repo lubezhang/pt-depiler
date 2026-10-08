@@ -27,6 +27,13 @@ const rootKeys = new Set<TExtensionStorageKey>(["config", "metadata"]);
 const readBases = new WeakMap<object, unknown>();
 const metadataListeners = new Set<(metadata: IMetadataPiniaStorageSchema) => void>();
 
+function notifyResourceCommit(): void {
+  if (typeof BroadcastChannel === "undefined") return;
+  const channel = new BroadcastChannel("ptd-resources");
+  channel.postMessage("changed");
+  channel.close();
+}
+
 export function subscribeMetadataCommits(listener: (metadata: IMetadataPiniaStorageSchema) => void): () => void {
   metadataListeners.add(listener);
   return () => metadataListeners.delete(listener);
@@ -51,6 +58,7 @@ export const extStorage = {
       value: copy(value),
     })) as Partial<IExtensionStorageSchema>;
     committedMetadata(result.metadata);
+    notifyResourceCommit();
     return result;
   },
   async getItem<K extends TExtensionStorageKey>(key: K): Promise<IExtensionStorageSchema[K] | null> {
@@ -70,6 +78,7 @@ export const extStorage = {
       value: copy(value),
     })) as IExtensionStorageSchema[K];
     if (key === "metadata") committedMetadata(result);
+    notifyResourceCommit();
     return result;
   },
   async setItem<K extends TExtensionStorageKey>(key: K, value: IExtensionStorageSchema[K]): Promise<void> {
@@ -87,8 +96,10 @@ export const extStorage = {
       Object.assign(value, committed);
       readBases.set(value, copy(committed));
       if (key === "metadata") committedMetadata(committed);
+      notifyResourceCommit();
       return;
     }
     await invokeIpc("set_ext_storage", { key, value });
+    notifyResourceCommit();
   },
 };

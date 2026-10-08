@@ -12,7 +12,7 @@ import { startLegacyRecovery } from "./service/index.ts";
 import { startLegacyWorkers } from "./service/index.ts";
 import { useConfigStore } from "./stores/config.ts";
 import { useMetadataStore } from "./stores/metadata.ts";
-import { extStorage } from "@/storage.ts";
+import { refreshResourceCache, startResourceCacheSync } from "./service/cacheSync.ts";
 
 export interface AppContext {
   app: VueApp;
@@ -54,24 +54,18 @@ function defaultDependencies(): BootstrapDependencies {
       await metadata.$onReady().catch(() => {
         throw { code: "APP_BOOTSTRAP_FAILED", message: "资源配置恢复失败", operationId: "bootstrap:metadataRestore" };
       });
-      const latestConfig = await extStorage.getItem("config").catch(() => {
-        throw { code: "APP_BOOTSTRAP_FAILED", message: "配置读取失败", operationId: "bootstrap:configRead" };
+      await refreshResourceCache(pinia, true).catch(() => {
+        throw { code: "APP_BOOTSTRAP_FAILED", message: "资源缓存读取失败", operationId: "bootstrap:cacheRead" };
       });
-      const latestMetadata = await extStorage.getItem("metadata").catch(() => {
-        throw { code: "APP_BOOTSTRAP_FAILED", message: "资源配置读取失败", operationId: "bootstrap:metadataRead" };
-      });
-      if (latestConfig)
-        config.$patch((state) => {
-          for (const key of Object.keys(state)) delete (state as Record<string, unknown>)[key];
-          Object.assign(state, latestConfig);
-        });
-      if (latestMetadata)
-        metadata.$patch((state) => {
-          for (const key of Object.keys(state)) delete (state as Record<string, unknown>)[key];
-          Object.assign(state, latestMetadata);
-        });
     },
-    startWorkers: startLegacyWorkers,
+    startWorkers: async () => {
+      const stopWorkers = await startLegacyWorkers();
+      const stopCache = startResourceCacheSync(pinia);
+      return async () => {
+        stopCache();
+        await stopWorkers();
+      };
+    },
     target: () => document.querySelector("#app"),
     report: (error) =>
       console.error(

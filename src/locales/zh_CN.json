@@ -629,6 +629,7 @@
       "download": "下载",
       "search-entity": "@:common.search",
       "social-information": "媒体评分",
+      "tasks": "持久任务",
       "ui": "界面UI",
       "user-info": "用户信息"
     },

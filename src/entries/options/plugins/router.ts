@@ -38,6 +38,12 @@ export const setBaseChildren: RouteRecordRaw[] = [
     meta: { icon: "mdi-multimedia" },
     component: () => import("../views/Settings/SetBase/SocialInformationWindow.vue"),
   },
+  {
+    path: "tasks",
+    name: "SetBaseTasks",
+    meta: { icon: "mdi-calendar-clock", usesGlobalSave: false },
+    component: () => import("../views/Settings/SetBase/TasksWindow.vue"),
+  },
 ] as const;
 
 export const routes: RouteRecordRaw[] = [

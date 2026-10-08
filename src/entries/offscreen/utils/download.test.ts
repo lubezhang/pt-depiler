@@ -29,15 +29,29 @@ vi.mock("@ptd/downloader", () => ({
 vi.mock("@/messages.ts", () => ({ onMessage: mocks.onMessage, sendMessage: mocks.sendMessage }));
 vi.mock("./logger.ts", () => ({ logger: mocks.logger }));
 vi.mock("./site.ts", () => ({ getSiteInstance: mocks.getSiteInstance }));
-vi.mock("../adapter/indexdb.ts", () => ({
-  ptdIndexDb: Promise.resolve({
-    clear: vi.fn(),
-    delete: vi.fn(),
-    get: vi.fn((_: string, id: number) => mocks.history.get(id)),
-    getAll: vi.fn(),
-    put: mocks.put,
-  }),
-}));
+vi.mock("../adapter/downloadHistory.ts", async () => {
+  const { publicDownloadHistory } = await import("@/shared/security/artifacts.ts");
+  return {
+    downloadHistoryRepository: {
+      clear: vi.fn(async () => {
+        const count = mocks.history.size;
+        mocks.history.clear();
+        return count;
+      }),
+      delete: vi.fn(async (id: number) => mocks.history.delete(id)),
+      findById: vi.fn(async (id: number) => mocks.history.get(id)),
+      findAll: vi.fn(async () => [...mocks.history.values()]),
+      insert: vi.fn(async (value: Record<string, unknown>) => {
+        const id = (value.id as number | undefined) ?? 1;
+        await mocks.put("download_history", { ...publicDownloadHistory({ ...value, id } as never) });
+        return id;
+      }),
+      saveIfUnchanged: vi.fn(async (_base: unknown, value: Record<string, unknown>) => {
+        await mocks.put("download_history", { ...publicDownloadHistory(value as never) });
+      }),
+    },
+  };
+});
 
 import "./download.ts";
 

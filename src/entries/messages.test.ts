@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-const { downloadHistory, indexDb } = vi.hoisted(() => {
+const { downloadHistory, indexDb, invoke } = vi.hoisted(() => {
   const downloadHistory = new Map<number, Record<string, unknown>>();
   return {
     downloadHistory,
+    invoke: vi.fn().mockResolvedValue(undefined),
     indexDb: {
       clear: vi.fn(),
       delete: vi.fn(),
@@ -17,7 +18,7 @@ const { downloadHistory, indexDb } = vi.hoisted(() => {
   };
 });
 
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => {}) }));
 vi.mock("@/storage.ts", () => ({
   subscribeMetadataCommits: vi.fn(() => () => undefined),
@@ -29,9 +30,33 @@ vi.mock("@/storage.ts", () => ({
 vi.mock("@/offscreen/adapter/indexdb.ts", () => ({
   ptdIndexDb: Promise.resolve(indexDb),
 }));
+vi.mock("@/offscreen/adapter/downloadHistory.ts", async () => {
+  const { publicDownloadHistory } = await import("@/shared/security/artifacts.ts");
+  return {
+    downloadHistoryRepository: {
+      findById: vi.fn(async (id: number) => downloadHistory.get(id)),
+      findAll: vi.fn(async () => [...downloadHistory.values()]),
+      insert: vi.fn(async (value: Record<string, unknown>) => {
+        const id = (value.id as number | undefined) ?? 1;
+        await indexDb.put("download_history", { ...publicDownloadHistory({ ...value, id } as never) });
+        return id;
+      }),
+      saveIfUnchanged: vi.fn(async (_base: unknown, value: Record<string, unknown>) => {
+        await indexDb.put("download_history", { ...publicDownloadHistory(value as never) });
+      }),
+      delete: vi.fn(async (id: number) => downloadHistory.delete(id)),
+      clear: vi.fn(async () => {
+        const count = downloadHistory.size;
+        downloadHistory.clear();
+        return count;
+      }),
+    },
+    migrateDownloadHistory: vi.fn(async () => undefined),
+  };
+});
 vi.mock("file-saver", () => ({ saveAs: vi.fn() }));
 
-import { assertAllProtocolHandlersRegistered, onMessage, protocolNames, sendMessage } from "./messages.ts";
+import { assertAllProtocolHandlersRegistered, protocolNames, sendMessage } from "./messages.ts";
 
 describe("公开协议完整性", () => {
   it("缺失公开协议时完整性断言列出缺失协议", () => {
@@ -55,11 +80,8 @@ describe("消息协议", () => {
     );
   });
 
-  it("下载重试 handler 失败后将历史记录更新为 failed", async () => {
+  it("下载重试 handler 将任务持久入队", async () => {
     downloadHistory.set(2, { id: 2, downloadStatus: "pending" });
-    onMessage("downloadTorrent", async () => {
-      throw new Error("retry failed");
-    });
 
     await expect(
       sendMessage("reDownloadTorrent", {
@@ -70,7 +92,8 @@ describe("消息协议", () => {
       }),
     ).resolves.toBeUndefined();
 
-    await vi.waitFor(() => expect(downloadHistory.get(2)).toMatchObject({ downloadStatus: "failed" }));
+    expect(invoke).toHaveBeenCalledWith("schedule_redownload", { downloadId: "2", delaySecs: 0 });
+    expect(downloadHistory.get(2)).toMatchObject({ downloadStatus: "pending" });
   });
 
   it("下载状态持久化失败时向调用方传播错误", async () => {

@@ -27,6 +27,7 @@ cookie_store = "0.22"
 reqwest_cookie_store = "0.9"
 tempfile = "3"
 libc = "0.2"
+sha2 = "0.10"
 ts-rs = { version = "9", features = ["serde-json-impl"] }
 
 [features]
@@ -35,5 +36,4 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [dev-dependencies]
 flate2 = "1"
-sha2 = "0.10"
 syn = { version = "2", features = ["full", "visit"] }
