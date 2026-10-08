@@ -5,12 +5,16 @@ const mocks = vi.hoisted(() => ({
   getSite: vi.fn(),
   invoke: vi.fn(),
   sendMessage: vi.fn(),
-  NeedLoginError: class NeedLoginError extends Error {},
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: mocks.invoke }));
+vi.mock("@/offscreen/adapter/site.ts", () => ({ siteDependencies: () => ({ http: axios }) }));
+vi.mock("@/storage.ts", () => ({
+  extStorage: { getItem: async () => ({ sites: { "fixture-site": { url: "https://tracker.example/" } } }) },
+}));
 vi.mock("@/messages.ts", () => ({ sendMessage: mocks.sendMessage }));
-vi.mock("@ptd/site", () => ({ getSite: mocks.getSite, NeedLoginError: mocks.NeedLoginError }));
+vi.mock("@ptd/site", async () => ({ getSite: mocks.getSite, ...(await import("~/packages/site/types.ts")) }));
+import { NeedLoginError } from "~/packages/site/types.ts";
 
 import nexusLogin from "./fixtures/nexus-login.html?raw";
 import {
@@ -97,6 +101,7 @@ describe("prepareSiteLogin", () => {
       .mockResolvedValueOnce(response(parse(nexusLogin), 200, "https://tracker.example/auth/login.php"));
 
     const preparing = prepareSiteLogin({
+      siteId: "fixture-site",
       siteUrl: "https://tracker.example/",
       schema: "NexusPHP",
       loginPath: "/auth/login.php",
@@ -120,7 +125,7 @@ describe("prepareSiteLogin", () => {
 
 describe("应用内站点页面登录", () => {
   it("默认打开站点首页，以适配不同站点的登录入口", async () => {
-    await openInteractiveSiteLogin({ siteUrl: "https://tracker.example/", schema: "Unit3D" });
+    await openInteractiveSiteLogin({ siteId: "fixture-site", siteUrl: "https://tracker.example/", schema: "Unit3D" });
 
     expect(mocks.invoke).toHaveBeenCalledWith("open_site_login", {
       siteUrl: "https://tracker.example/",
@@ -129,7 +134,11 @@ describe("应用内站点页面登录", () => {
   });
 
   it("自定义登录路径仍可打开指定页面", async () => {
-    await openInteractiveSiteLogin({ siteUrl: "https://tracker.example/", loginPath: "/auth/login" });
+    await openInteractiveSiteLogin({
+      siteId: "fixture-site",
+      siteUrl: "https://tracker.example/",
+      loginPath: "/auth/login",
+    });
     expect(mocks.invoke).toHaveBeenCalledWith("open_site_login", {
       siteUrl: "https://tracker.example/",
       loginUrl: "https://tracker.example/auth/login",
@@ -203,7 +212,7 @@ describe("getCaptchaImage", () => {
       }),
     );
 
-    await expect(getCaptchaImage(preparedLogin())).resolves.toBe("blob:captcha");
+    await expect(getCaptchaImage(preparedLogin(), "fixture-site")).resolves.toBe("blob:captcha");
     expect(createObjectUrl).toHaveBeenCalledWith(image);
     expect(JSON.stringify(mocks.invoke.mock.calls)).not.toContain("id=123");
   });
@@ -216,7 +225,7 @@ describe("getCaptchaImage", () => {
       }),
     );
 
-    await expect(getCaptchaImage(preparedLogin())).rejects.toThrow("验证码图片响应不是有效图片");
+    await expect(getCaptchaImage(preparedLogin(), "fixture-site")).rejects.toThrow("验证码图片响应不是有效图片");
   });
 });
 
@@ -247,7 +256,11 @@ describe("loginSite", () => {
       imagestring: "1234",
     });
     expect(mocks.sendMessage).toHaveBeenCalledWith("getAllCookies", { domain: "tracker.example" });
-    expect(mocks.getSite).toHaveBeenCalledWith("fixture-site", { url: "https://tracker.example/" });
+    expect(mocks.getSite).toHaveBeenCalledWith(
+      "fixture-site",
+      { url: "https://tracker.example/" },
+      expect.objectContaining({ http: axios }),
+    );
     expect(siteRequest).toHaveBeenCalledWith({ url: "/", responseType: "document" });
     expect(JSON.stringify(mocks.invoke.mock.calls)).not.toContain("plain-secret");
     expect(JSON.stringify(mocks.invoke.mock.calls)).not.toContain("welcome=1");
@@ -275,7 +288,7 @@ describe("loginSite", () => {
     axiosRequest.mockResolvedValue(response(parse("<title>Dashboard</title>"), 200, "https://tracker.example/"));
     mocks.sendMessage.mockResolvedValue([{ name: "unrelated-cookie" }]);
     mocks.getSite.mockResolvedValue({
-      request: vi.fn().mockRejectedValue(new mocks.NeedLoginError("login required")),
+      request: vi.fn().mockRejectedValue(new NeedLoginError("login required")),
     });
 
     await expect(loginSite(loginInput(), preparedLogin(), "1234")).rejects.toThrow("站点仍返回未登录状态");

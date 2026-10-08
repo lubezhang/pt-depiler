@@ -115,6 +115,7 @@ async function openBrowserLogin() {
     await ensureCloseListener();
     browserLoginOpened.value = true;
     await openInteractiveSiteLogin({
+      siteId: props.siteId,
       siteUrl: props.siteUrl,
       schema: props.schema,
       loginPath: loginPath.value,
@@ -131,7 +132,7 @@ async function openBrowserLogin() {
 }
 
 async function refreshCaptchaImage(prepared: PreparedSiteLogin) {
-  const nextImageUrl = await getCaptchaImage(prepared);
+  const nextImageUrl = await getCaptchaImage(prepared, props.siteId);
   if (captchaImageUrl.value && captchaImageUrl.value !== nextImageUrl) {
     URL.revokeObjectURL(captchaImageUrl.value);
   }
@@ -168,6 +169,7 @@ async function prepareLoginPage() {
   noticeMessage.value = "";
   try {
     preparedLogin.value = await prepareSiteLogin({
+      siteId: props.siteId,
       siteUrl: props.siteUrl,
       schema: props.schema,
       loginPath: loginPath.value,

@@ -1,6 +1,6 @@
 import { Buffer } from "buffer";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
-import type { AxiosRequestConfig } from "axios";
+
+import type { AxiosInstance, AxiosRequestConfig } from "axios";
 import parseTorrent, { Instance as TorrentInstance } from "parse-torrent";
 import isValidFilename from "valid-filename";
 import { decode } from "urlencode";
@@ -33,7 +33,7 @@ export function extractMagnetHash(magnetUri: string): string | null {
   return v2Match?.groups?.hash || null;
 }
 
-export async function getRemoteTorrentFile(options: AxiosRequestConfig = {}): Promise<ParsedTorrent> {
+export async function getRemoteTorrentFile(options: AxiosRequestConfig, axios: AxiosInstance): Promise<ParsedTorrent> {
   let req = await axios.request({
     ...options,
     // Some PT sites return the torrent body on a 302 and use Location only for

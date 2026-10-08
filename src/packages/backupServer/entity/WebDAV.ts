@@ -1,10 +1,9 @@
 import urlJoin from "url-join";
-import { AuthType, createClient, type FileStat, type WebDAVClient } from "webdav";
+import { type FileStat, type WebDAVClient } from "webdav";
 
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import { localSort } from "../utils";
 import type { IBackupConfig, IBackupData, IBackupFileInfo, IBackupFileListOption, IBackupMetadata } from "../type";
-import { installTauriWebDAVTransport } from "~/extends/axios/tauriWebDAVTransport.ts";
 
 interface WebDAVConfig extends IBackupConfig {
   config: {
@@ -49,12 +48,7 @@ export default class WebDAV extends AbstractBackupServer<WebDAVConfig> {
 
   private getServer(): WebDAVClient {
     if (!this.server) {
-      installTauriWebDAVTransport();
-      this.server = createClient(this.userConfig.address, {
-        username: this.userConfig.loginName,
-        password: this.userConfig.loginPwd,
-        authType: this.userConfig.digest ? AuthType.Digest : undefined,
-      });
+      this.server = this.ports.createWebDAV(this.userConfig);
     }
     return this.server;
   }

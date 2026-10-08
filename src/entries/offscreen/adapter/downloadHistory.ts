@@ -38,6 +38,30 @@ export const downloadHistoryRepository: Repository<TTorrentDownloadKey, History>
   },
 };
 
+export async function importLegacyRestoreJournals(): Promise<void> {
+  if (getCurrentWindow().label !== "main") {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const status = (await invokeIpc("get_storage_status", {})) as { imports?: Record<string, unknown> };
+      if (status.imports?.legacyRestoreJournal) return;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error("Primary window did not complete legacy restore recovery");
+  }
+  const database = await ptdIndexDb;
+  // Older releases may contain this store; never create a new active journal there.
+  if (!database.objectStoreNames.contains("restore_journal" as never)) {
+    await invokeIpc("import_legacy_restore_journals", { journals: [], histories: [] });
+    return;
+  }
+  const legacy = database as unknown as import("idb").IDBPDatabase;
+  const journals = await legacy.getAll("restore_journal");
+  const histories = (await database.getAll("download_history")).map(publicDownloadHistory);
+  await invokeIpc("import_legacy_restore_journals", { journals, histories });
+  await legacy
+    .clear("restore_journal")
+    .catch(() => console.warn("[restore] Legacy journal cleanup will retry at next startup"));
+}
+
 export async function migrateDownloadHistory(): Promise<void> {
   if (getCurrentWindow().label !== "main") {
     for (let attempt = 0; attempt < 100; attempt++) {

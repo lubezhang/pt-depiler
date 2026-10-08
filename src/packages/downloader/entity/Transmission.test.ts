@@ -17,7 +17,11 @@ describe("Transmission 管理 RPC", () => {
         response: { status: 409, headers: { "x-transmission-session-id": "session-1" } },
       })
       .mockResolvedValueOnce({ data: { result: "success", arguments: {} } });
-    const client = new Transmission({ address: "http://localhost:9091" });
+    const client = new Transmission({ address: "http://localhost:9091" }).configure({
+      http: { post: mocks.post } as never,
+      torrentHttp: {} as never,
+      openWebSocket: vi.fn(),
+    });
 
     await expect(client.pauseTorrent(7)).resolves.toBe(true);
     expect(mocks.post).toHaveBeenCalledTimes(2);
@@ -26,7 +30,11 @@ describe("Transmission 管理 RPC", () => {
 
   it("仅在 RPC 返回 success 时报告开始、暂停和删除成功", async () => {
     mocks.post.mockResolvedValue({ data: { result: "permission denied", arguments: {} } });
-    const client = new Transmission({ address: "http://localhost:9091" });
+    const client = new Transmission({ address: "http://localhost:9091" }).configure({
+      http: { post: mocks.post } as never,
+      torrentHttp: {} as never,
+      openWebSocket: vi.fn(),
+    });
 
     await expect(client.resumeTorrent(1)).resolves.toBe(false);
     await expect(client.pauseTorrent(1)).resolves.toBe(false);
@@ -37,7 +45,11 @@ describe("Transmission 管理 RPC", () => {
     mocks.post
       .mockResolvedValueOnce({ data: { result: "success", arguments: { "download-dir": "/downloads/default" } } })
       .mockResolvedValueOnce({ data: { result: "success", arguments: {} } });
-    const client = new Transmission({ address: "http://localhost:9091" });
+    const client = new Transmission({ address: "http://localhost:9091" }).configure({
+      http: { post: mocks.post } as never,
+      torrentHttp: {} as never,
+      openWebSocket: vi.fn(),
+    });
 
     await expect(client.getDefaultDownloadDirectory()).resolves.toBe("/downloads/default");
     await expect(client.setDefaultDownloadDirectory("/downloads/media")).resolves.toBe(true);
@@ -49,7 +61,11 @@ describe("Transmission 管理 RPC", () => {
 
   it("更新种子数据位置，并传递移动已有数据的选项", async () => {
     mocks.post.mockResolvedValue({ data: { result: "success", arguments: {} } });
-    const client = new Transmission({ address: "http://localhost:9091" });
+    const client = new Transmission({ address: "http://localhost:9091" }).configure({
+      http: { post: mocks.post } as never,
+      torrentHttp: {} as never,
+      openWebSocket: vi.fn(),
+    });
 
     await expect(client.setTorrentLocation(7, "/downloads/media", true)).resolves.toBe(true);
     expect(mocks.post.mock.calls[0][1]).toEqual({
@@ -91,7 +107,11 @@ describe("Transmission 管理 RPC", () => {
         },
       },
     });
-    const client = new Transmission({ address: "http://localhost:9091" });
+    const client = new Transmission({ address: "http://localhost:9091" }).configure({
+      http: { post: mocks.post } as never,
+      torrentHttp: {} as never,
+      openWebSocket: vi.fn(),
+    });
 
     await expect(client.getAllTorrents()).resolves.toEqual([
       expect.objectContaining({
@@ -126,7 +146,11 @@ describe("Transmission 管理 RPC", () => {
         },
       },
     });
-    const client = new Transmission({ address: "http://localhost:9091" });
+    const client = new Transmission({ address: "http://localhost:9091" }).configure({
+      http: { post: mocks.post } as never,
+      torrentHttp: {} as never,
+      openWebSocket: vi.fn(),
+    });
 
     await expect(client.getTorrentFiles(7)).resolves.toEqual([
       { name: "movie/video.mkv", length: 100, bytesCompleted: 50, wanted: true, priority: 1 },

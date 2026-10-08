@@ -1,4 +1,4 @@
-import { intersection, toMerged } from "es-toolkit";
+import { backupServerDependencies } from "@/offscreen/adapter/backupServer.ts";
 import { formatDate } from "date-fns";
 import { getBackupServer, IBackupData, IBackupFileInfo } from "@ptd/backupServer";
 import { backupDataToJSZipBlob } from "@ptd/backupServer/utils.ts";
@@ -7,18 +7,12 @@ import AbstractBackupServer from "@ptd/backupServer/AbstractBackupServer.ts";
 import { onMessage, sendMessage } from "@/messages.ts";
 import { extStorage } from "@/storage.ts";
 import { DefaultBackupFields } from "@/shared/types.ts";
-import type { IExtensionStorageSchema, TExtensionStorageKey } from "@/storage.ts";
-import type {
-  IRestoreOptions,
-  IMetadataPiniaStorageSchema,
-  TBackupFields,
-  TBackupServerKey,
-  IConfigPiniaStorageSchema,
-  TUserInfoStorageSchema,
-} from "@/shared/types.ts";
+import type { TExtensionStorageKey } from "@/storage.ts";
+import type { IRestoreOptions, IMetadataPiniaStorageSchema, TBackupFields, TBackupServerKey } from "@/shared/types.ts";
 
 import { logger } from "./logger.ts";
-import { redactBackup, withoutBackupKey } from "./backupRedaction.ts";
+import { RemoteBackupService } from "~/application/backup/remote.ts";
+import { BackupService, type BackupExportOptions, type BackupSnapshot } from "~/application/backup/service.ts";
 import { publicDownloadHistory, publicKeepUploadTask, publicSearchSnapshot } from "@/shared/security/artifacts.ts";
 import { invokeIpc } from "~/extends/tauri/ipc.ts";
 
@@ -30,64 +24,45 @@ export const storageKey = [
   "keepUploadTask",
 ] as TExtensionStorageKey[];
 
-export async function createBackupData(backupFields: TBackupFields[] = DefaultBackupFields): Promise<IBackupData> {
-  const config = (await sendMessage("getExtStorage", "config")) as IConfigPiniaStorageSchema;
-  const encrypted = Boolean(config?.backup?.encryptionKey);
-  if (
-    !encrypted &&
-    backupFields.some((field) =>
-      ["cookies", "downloadHistory", "keepUploadTask", "searchResultSnapshot"].includes(field),
-    )
-  ) {
-    throw new Error("BACKUP_ENCRYPTION_REQUIRED");
-  }
-  const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
+const backupService = new BackupService({
+  snapshot: async (includeCookies) => (await invokeIpc("get_backup_snapshot", { includeCookies })) as BackupSnapshot,
+  commit: (expectedRevision, data, cookies) =>
+    invokeIpc("restore_backup_snapshot", { expectedRevision, data, cookies: cookies as never }),
+  sanitize: (field, value) => {
+    if (field === "downloadHistory") return value.map(publicDownloadHistory);
+    if (field === "keepUploadTask")
+      return Object.fromEntries(Object.entries(value).map(([id, task]) => [id, publicKeepUploadTask(task as never)]));
+    if (field === "searchResultSnapshot")
+      return Object.fromEntries(
+        Object.entries(value).map(([id, snapshot]) => [id, publicSearchSnapshot(snapshot as never)]),
+      );
+    return value;
+  },
+  now: Date.now,
+  get version() {
+    return `PT-Depiler (${__APP_VERSION__})`;
+  },
+});
 
-  const backupData: IBackupData = {};
-
-  // 备份已添加站点的Cookie
-  if (backupFields.includes("cookies")) {
-    const cookies = {} as Required<IBackupData>["cookies"];
-    for (const siteHost in metadataStore.siteHostMap) {
-      const siteHostCookies = await sendMessage("getAllCookies", { domain: siteHost });
-      if (siteHostCookies.length > 0) {
-        cookies[siteHost] = siteHostCookies;
-      }
-    }
-    backupData.cookies = cookies;
-  }
-
-  // 处理应用持久化存储字段
-  for (const field of storageKey) {
-    if (backupFields.includes(field as TBackupFields)) {
-      backupData[field] = await sendMessage("getExtStorage", field);
-    }
-  }
-
-  // 备份下载历史
-  if (backupFields.includes("downloadHistory")) {
-    backupData["downloadHistory"] = (await invokeIpc("list_download_history", {})) as IBackupData["downloadHistory"];
-  }
-
-  backupData.manifest = {
-    time: new Date().getTime(),
-    version: `PT-Depiler (${__APP_VERSION__})`,
-    redactedSecrets: !encrypted,
-  };
-
-  logger({
-    msg: `A Backup data created at ${formatDate(backupData.manifest.time!, "yyyy-MM-dd HH:mm:ss")}`,
-    data: Object.keys(backupData),
-  });
-  return encrypted ? withoutBackupKey(backupData) : redactBackup(backupData);
+export async function createBackupData(
+  backupFields: TBackupFields[] = DefaultBackupFields,
+  options: BackupExportOptions = {},
+): Promise<IBackupData> {
+  return (await backupService.prepareExport(backupFields, options)).data;
 }
 
 export async function getBackupServerInstance(backupServerId: TBackupServerKey): Promise<AbstractBackupServer<any>> {
   logger({ msg: `Get backup server instance for ID: ${backupServerId}` });
   const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
   const backupServerConfig = metadataStore.backupServers[backupServerId];
-  return await getBackupServer(backupServerConfig);
+  return await getBackupServer(backupServerConfig, backupServerDependencies(backupServerId));
 }
+
+const remoteBackup = new RemoteBackupService({
+  config: async (id) => (await extStorage.getItem("metadata"))?.backupServers?.[id],
+  create: (config) => getBackupServer(config, backupServerDependencies(config.id)),
+  recordSuccess: recordBackupSuccess,
+});
 
 async function recordBackupSuccess(backupServerId: string): Promise<void> {
   const metadata = await extStorage.getItem("metadata");
@@ -103,14 +78,12 @@ export async function exportBackupData(
   backupServerId: string | "local",
   backupFields: TBackupFields[] = DefaultBackupFields,
   backupFilename = `PTD_backup_${formatDate(new Date(), "yyyyMMdd'T'HHmm")}.zip`,
+  options: BackupExportOptions = {},
 ): Promise<boolean> {
-  const backupData = await createBackupData(backupFields);
+  const { data: backupData, encryptionKey } = await backupService.prepareExport(backupFields, options);
   if (!/^PTD_backup_(?:task_[0-9]+|[0-9]{8}T[0-9]{4})\.zip$/.test(backupFilename)) {
     throw new Error("Invalid backup filename");
   }
-
-  const configStore = (await sendMessage("getExtStorage", "config")) as IConfigPiniaStorageSchema;
-  const encryptionKey = configStore?.backup?.encryptionKey ?? "";
 
   logger({ msg: `Exporting backup data to ${backupServerId}`, data: { backupFields, backupFilename } });
   if (backupServerId === "local") {
@@ -119,29 +92,20 @@ export async function exportBackupData(
     await sendMessage("downloadFile", { url: blobUrl, filename: backupFilename });
     return true;
   } else {
-    const backupServerInstance = await getBackupServerInstance(backupServerId);
-    backupServerInstance.setEncryptionKey(encryptionKey);
-    const backupStatus = await backupServerInstance.addFile(backupFilename, backupData);
-
-    // 更新最后一次备份时间
-    if (backupStatus) {
-      await recordBackupSuccess(backupServerId);
-    }
-
-    return backupStatus;
+    return remoteBackup.export(backupServerId, backupFilename, backupData, encryptionKey);
   }
 }
 
-onMessage("exportBackupData", async ({ data: { backupServerId, backupFields, backupFilename } }) => {
-  return await exportBackupData(backupServerId, backupFields, backupFilename);
-});
+onMessage(
+  "exportBackupData",
+  async ({ data: { backupServerId, backupFields, backupFilename, includeCredentials } }) => {
+    return await exportBackupData(backupServerId, backupFields, backupFilename, { includeCredentials });
+  },
+);
 
 export async function confirmBackupCompletion(backupServerId: string, backupFilename: string): Promise<boolean> {
   if (!/^PTD_backup_task_[0-9]+\.zip$/.test(backupFilename)) throw new Error("Invalid task backup filename");
-  const server = await getBackupServerInstance(backupServerId);
-  if (!(await server.list()).some((file) => file.filename === backupFilename)) return false;
-  await recordBackupSuccess(backupServerId);
-  return true;
+  return remoteBackup.confirm(backupServerId, backupFilename);
 }
 
 onMessage("confirmBackupCompletion", async ({ data: { backupServerId, backupFilename } }) => {
@@ -149,70 +113,10 @@ onMessage("confirmBackupCompletion", async ({ data: { backupServerId, backupFile
 });
 
 export async function restoreBackupData(
-  restoreData: IBackupData, // 已经解密了的数据
+  restoreData: IBackupData,
   restoreOptions: IRestoreOptions = {},
 ): Promise<boolean> {
-  const { fields = [], expandCookieMinutes = -1, keepExistUserInfo = true } = restoreOptions;
-
-  const restoreDataExistFields = Object.keys(restoreData.manifest?.files ?? {});
-  const restoreFields = intersection(fields, restoreDataExistFields);
-
-  const bases: Partial<IExtensionStorageSchema> = {};
-  const proposed: Partial<IExtensionStorageSchema> = {};
-
-  // 恢复应用持久化存储字段
-  for (const field of storageKey.toReversed()) {
-    if (restoreFields.includes(field as TBackupFields)) {
-      let fieldData = restoreData[field] as IExtensionStorageSchema[typeof field];
-      if (fieldData) {
-        const base = await extStorage.getItem(field);
-        if (field === "userInfo" && (keepExistUserInfo || restoreData.manifest?.redactedSecrets)) {
-          const userInfoStore = ((await sendMessage("getExtStorage", "userInfo")) ?? {}) as TUserInfoStorageSchema;
-          fieldData = toMerged(fieldData, userInfoStore);
-        }
-
-        if (restoreData.manifest?.redactedSecrets && (field === "config" || field === "metadata")) {
-          fieldData = toMerged(base ?? {}, fieldData) as IExtensionStorageSchema[typeof field];
-        }
-
-        if (field === "keepUploadTask")
-          fieldData = Object.fromEntries(
-            Object.entries(fieldData).map(([id, task]) => [id, publicKeepUploadTask(task)]),
-          );
-        if (field === "searchResultSnapshot")
-          fieldData = Object.fromEntries(
-            Object.entries(fieldData).map(([id, snapshot]) => [id, publicSearchSnapshot(snapshot)]),
-          );
-        Object.assign(bases, { [field]: base });
-        Object.assign(proposed, { [field]: fieldData });
-      }
-    }
-  }
-
-  if (Object.keys(proposed).length) await extStorage.mergeBatch(bases, proposed);
-
-  if (restoreFields.includes("downloadHistory")) {
-    const histories = restoreData.downloadHistory.map(publicDownloadHistory);
-    await invokeIpc("replace_download_history", { histories });
-  }
-
-  // 恢复已添加站点的Cookie
-  if (restoreFields.includes("cookies")) {
-    const now = new Date().getTime() / 1000;
-
-    for (const cookieData of Object.values(restoreData.cookies!)) {
-      for (const cookie of cookieData) {
-        // 延长 cookie 过期时间
-        if (expandCookieMinutes > 0) {
-          cookie.expirationDate = Math.max(cookie.expirationDate ?? 0, now) + expandCookieMinutes * 60;
-        }
-
-        await sendMessage("setCookie", cookie);
-      }
-    }
-  }
-
-  return true;
+  return backupService.restore(restoreData, restoreOptions);
 }
 
 onMessage("restoreBackupData", async ({ data: { restoreData, restoreOptions = {} } }) => {
@@ -220,8 +124,7 @@ onMessage("restoreBackupData", async ({ data: { restoreData, restoreOptions = {}
 });
 
 export async function getBackupHistory(backupServerId: string): Promise<IBackupFileInfo[]> {
-  const backupServerInstance = await getBackupServerInstance(backupServerId);
-  return await backupServerInstance.list();
+  return remoteBackup.list(backupServerId);
 }
 
 onMessage("getBackupHistory", async ({ data: backupServerId }) => {
@@ -229,8 +132,7 @@ onMessage("getBackupHistory", async ({ data: backupServerId }) => {
 });
 
 export async function deleteBackupHistory(backupServerId: string, path: string): Promise<boolean> {
-  const backupServerInstance = await getBackupServerInstance(backupServerId);
-  return await backupServerInstance.deleteFile(path);
+  return remoteBackup.remove(backupServerId, path);
 }
 
 onMessage("deleteBackupHistory", async ({ data: { backupServerId, path } }) => {
@@ -242,9 +144,7 @@ export async function getRemoteBackupData(
   path: string,
   decryptKey: string = "",
 ): Promise<IBackupData> {
-  const backupServerInstance = await getBackupServerInstance(backupServerId);
-  backupServerInstance.setEncryptionKey(decryptKey);
-  return await backupServerInstance.getFile(path);
+  return remoteBackup.read(backupServerId, path, decryptKey);
 }
 
 onMessage("getRemoteBackupData", async ({ data: { backupServerId, path, decryptKey = "" } }) => {

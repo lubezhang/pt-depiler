@@ -1,7 +1,7 @@
 import { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import urlJoin from "url-join";
 import Sizzle from "sizzle";
-import { axios, isCloudflareBlocked } from "../utils/adapter";
+import { isCloudflareBlocked } from "~/extends/axios/retryWhenCloudflareBlock.ts";
 
 import PrivateSite from "./AbstractPrivateSite";
 
@@ -440,7 +440,7 @@ export default class AvistazNetwork extends PrivateSite {
   public override async getUserInfoResult(lastUserInfo: Partial<IUserInfo> = {}): Promise<IUserInfo> {
     let flushUserInfo: IUserInfo = {
       status: EResultParseStatus.unknownError,
-      updateAt: +new Date(),
+      updateAt: this.ports.clock.now(),
       site: this.metadata.id,
     };
 
@@ -632,7 +632,7 @@ export default class AvistazNetwork extends PrivateSite {
 
     const requestApi = async (): Promise<AxiosResponse<T>> => {
       try {
-        return await axios.request<T>(axiosConfig);
+        return await this.http.request<T>(axiosConfig);
       } catch (error) {
         const response = (error as AxiosError<T>).response;
         if (!response) {
@@ -678,7 +678,7 @@ export default class AvistazNetwork extends PrivateSite {
 
   // 使用 retrieveRuntimeSettings 作为中间存储，存储 `token` 以及 `expiry` 降低授权频率
   public async getAuthToken(lastUserInfo: Partial<IUserInfo> = {}): Promise<string> {
-    const currentTime = Math.floor(Date.now() / 1000); // 当前时间戳，单位为秒
+    const currentTime = Math.floor(this.ports.clock.now() / 1000); // 当前时间戳，单位为秒
 
     // 1. 判断 runtimeSettings 获取存储的 token 和 expiry
     const storedAuthToken = await this.retrieveRuntimeSettings<string>("authToken");

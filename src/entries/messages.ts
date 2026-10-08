@@ -146,6 +146,7 @@ export interface ProtocolMap {
     backupServerId: string | "local";
     backupFields: TBackupFields[];
     backupFilename?: string;
+    includeCredentials?: boolean;
   }): boolean;
   confirmBackupCompletion(data: { backupServerId: string; backupFilename: string }): boolean;
   getBackupHistory(data: string): IBackupFileInfo[];

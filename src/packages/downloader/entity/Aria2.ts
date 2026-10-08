@@ -138,7 +138,11 @@ interface rawTask {
 export default class Aria2 extends AbstractBittorrentClient {
   readonly version = "v0.1.0";
 
-  private _wsClient: WebSocket;
+  private wsClient?: WebSocket;
+
+  private get _wsClient(): WebSocket {
+    return (this.wsClient ??= this.ports.openWebSocket(this.config.address.replace(/^http/, "ws")));
+  }
   private _msgId = 0;
 
   get msgId() {
@@ -156,7 +160,6 @@ export default class Aria2 extends AbstractBittorrentClient {
     this.config.address = address;
 
     // https -> wss , http -> ws
-    this._wsClient = new WebSocket(address.replace(/^http/, "ws"));
   }
 
   private async methodSend<T>(methodName: METHODS, params: any[] = []): Promise<jsonRPCResponse<T>> {
@@ -245,10 +248,13 @@ export default class Aria2 extends AbstractBittorrentClient {
       // 文件 add_torrent_file
       method = "aria2.addTorrent";
 
-      const torrent = await getRemoteTorrentFile({
-        url,
-        ...(options.localDownloadOption ?? {}),
-      });
+      const torrent = await getRemoteTorrentFile(
+        {
+          url,
+          ...(options.localDownloadOption ?? {}),
+        },
+        this.ports.torrentHttp,
+      );
 
       params = [torrent.metadata.base64(), [], addOption];
     }

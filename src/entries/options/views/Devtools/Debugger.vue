@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { siteDependencies } from "@/offscreen/adapter/site.ts";
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import * as estoolkit from "es-toolkit";
@@ -35,7 +36,10 @@ const selectedSite = ref<TSiteID>("");
 const useCustomerConfig = ref<boolean>(true);
 
 const clearSiteTarget = ref<TSiteID>("all");
-const siteSelectItems = computed(() => [{ title: t("Debugger.siteAll"), value: "all" }, ...definitionList.map((x) => ({ title: x, value: x }))]);
+const siteSelectItems = computed(() => [
+  { title: t("Debugger.siteAll"), value: "all" },
+  ...definitionList.map((x) => ({ title: x, value: x })),
+]);
 
 const piniaStoreContent = import.meta.glob<Record<string, Function>>("@/options/stores/*.ts");
 const piniaStoreName: Array<{ title: string; value: string }> = Object.keys(piniaStoreContent).map((x) => ({
@@ -66,12 +70,12 @@ async function getSiteInstance() {
     customerConfig = await getSiteConfig();
   }
 
-  return await createSiteInstance(selectedSite.value, customerConfig);
+  return await createSiteInstance(selectedSite.value, customerConfig, siteDependencies(selectedSite.value));
 }
 
 async function getSiteFavicon() {
   const siteInstance = await getSiteInstance();
-  return await getFavicon(siteInstance.metadata);
+  return await getFavicon(siteInstance.metadata, siteDependencies(selectedSite.value).http);
 }
 
 async function getPiniaStore(storeName: string) {
@@ -209,10 +213,18 @@ async function resetFnWrapper(resetFn: resetItem["resetFn"]) {
                   <v-checkbox v-model="useCustomerConfig" hide-details :label="t('Debugger.mergeUserConfig')" />
                 </v-col>
                 <v-col class="d-flex align-center">
-                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteMetadata())"> {{ t("Debugger.outputSiteDefinition") }} </v-btn>
-                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteConfig())"> {{ t("Debugger.outputUserConfig") }} </v-btn>
-                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteInstance())"> {{ t("Debugger.outputSiteInstance") }} </v-btn>
-                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteFavicon())"> {{ t("Debugger.outputFavicon") }} </v-btn>
+                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteMetadata())">
+                    {{ t("Debugger.outputSiteDefinition") }}
+                  </v-btn>
+                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteConfig())">
+                    {{ t("Debugger.outputUserConfig") }}
+                  </v-btn>
+                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteInstance())">
+                    {{ t("Debugger.outputSiteInstance") }}
+                  </v-btn>
+                  <v-btn :disabled="!selectedSite" class="mr-2" @click="log(getSiteFavicon())">
+                    {{ t("Debugger.outputFavicon") }}
+                  </v-btn>
                 </v-col>
               </v-row>
             </v-container>
@@ -307,7 +319,9 @@ async function resetFnWrapper(resetFn: resetItem["resetFn"]) {
                     >
                       <template v-slot:prepend>
                         <v-list-item-action class="mr-2">
-                          <v-btn color="red" @click="() => resetFnWrapper(item.resetFn)">{{ t("common.dialog.reset") }}</v-btn>
+                          <v-btn color="red" @click="() => resetFnWrapper(item.resetFn)">{{
+                            t("common.dialog.reset")
+                          }}</v-btn>
                         </v-list-item-action>
                       </template>
                       <template v-slot:append>

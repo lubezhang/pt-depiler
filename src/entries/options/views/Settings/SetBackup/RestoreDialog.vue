@@ -8,6 +8,7 @@ import { useRouter } from "vue-router";
 
 import { useConfigStore } from "@/options/stores/config.ts";
 import { useRuntimeStore } from "@/options/stores/runtime.ts";
+import { toAppError } from "~/application/contracts.ts";
 import { sendMessage } from "@/messages.ts";
 import { BackupFields, type TBackupFields, type IRestoreOptions } from "@/shared/types.ts";
 
@@ -31,6 +32,7 @@ const restoreOptions = ref<IRestoreOptions>({
   fields: [],
   expandCookieMinutes: 0,
   keepExistUserInfo: true,
+  includeCredentials: false,
 });
 
 const configStore = useConfigStore();
@@ -38,9 +40,12 @@ const runtimeStore = useRuntimeStore();
 
 function buildBackupOptions() {
   restoreOptions.value = {
-    fields: [...Object.keys(restoreData.value?.manifest?.files ?? {})] as TBackupFields[],
+    fields: [
+      ...Object.keys(restoreData.value?.manifest?.files ?? {}).filter((field) => field !== "cookies"),
+    ] as TBackupFields[],
     expandCookieMinutes: 0,
     keepExistUserInfo: true,
+    includeCredentials: false,
   };
   currentStep.value = "restore";
 }
@@ -144,7 +149,9 @@ function doRestore() {
         showDialog.value = false;
       })
       .catch((err) => {
-        runtimeStore.showSnakebar(t("SetBackup.RestoreDialog.failure", { error: err }), { color: "error" });
+        runtimeStore.showSnakebar(t("SetBackup.RestoreDialog.failure", { error: toAppError(err).message }), {
+          color: "error",
+        });
         console.error("[diagnostic] entries/options/views/Settings/SetBackup/RestoreDialog.vue:148");
       })
       .finally(() => {
@@ -280,6 +287,12 @@ function goToPtppImport() {
               </v-col>
             </v-row>
 
+            <v-switch
+              v-model="restoreOptions.includeCredentials"
+              label="恢复备份中的账号凭据"
+              color="warning"
+              :disabled="Boolean(restoreData?.manifest?.redactedSecrets)"
+            />
             <v-number-input
               v-model="restoreOptions.expandCookieMinutes"
               :label="t('SetBackup.RestoreDialog.expandCookieMinutes')"

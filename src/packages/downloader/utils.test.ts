@@ -24,7 +24,9 @@ describe("getRemoteTorrentFile", () => {
       headers: { "content-type": "application/force-download" },
     });
 
-    await expect(getRemoteTorrentFile({ url: "https://tracker.test/download" })).resolves.toMatchObject({
+    await expect(
+      getRemoteTorrentFile({ url: "https://tracker.test/download" }, { request } as never),
+    ).resolves.toMatchObject({
       name: "test.torrent",
     });
     expect(request).toHaveBeenCalledWith(
@@ -42,7 +44,7 @@ describe("getRemoteTorrentFile", () => {
       headers: { "content-type": "text/html" },
     });
 
-    await expect(getRemoteTorrentFile({ url: "https://tracker.test/download" })).rejects.toThrow(
+    await expect(getRemoteTorrentFile({ url: "https://tracker.test/download" }, { request } as never)).rejects.toThrow(
       "Invalid Torrent From Server",
     );
   });
@@ -60,7 +62,9 @@ describe("getRemoteTorrentFile", () => {
         data: torrentFixture(),
       });
 
-    await expect(getRemoteTorrentFile({ url: "https://tracker.test/download" })).resolves.toMatchObject({
+    await expect(
+      getRemoteTorrentFile({ url: "https://tracker.test/download" }, { request } as never),
+    ).resolves.toMatchObject({
       name: "test.torrent",
     });
     expect(request).toHaveBeenLastCalledWith(

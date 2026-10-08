@@ -16,7 +16,6 @@
  * 1. Gist 不支持删除历史记录，如果需要删除，请在 github 上手动删除对应 gist，并创建一个新的。
  */
 
-import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig } from "axios";
 import CryptoJS from "crypto-js";
 import AbstractBackupServer from "../AbstractBackupServer.ts";
@@ -82,7 +81,7 @@ export default class Gist extends AbstractBackupServer<GistConfig> {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
     };
-    return axios.request<T>({
+    return this.http.request<T>({
       ...config,
       baseURL: `https://api.github.com/gists/${this.userConfig.gist_id}`,
       url,

@@ -1,6 +1,8 @@
 /**
  * 对于 Bittorrent 软件的定义
  */
+import type { DownloaderDependencies } from "./ports.ts";
+export type { DownloaderDependencies } from "./ports.ts";
 import { AxiosRequestConfig } from "axios";
 
 export type TorrentClientFeature =
@@ -240,6 +242,19 @@ export abstract class AbstractBittorrentClient<T extends DownloaderBaseConfig = 
 
   protected constructor(options: T) {
     this.config = options as T;
+  }
+
+  private dependencies?: DownloaderDependencies;
+  public configure(dependencies: DownloaderDependencies): this {
+    this.dependencies = dependencies;
+    return this;
+  }
+  protected get ports(): DownloaderDependencies {
+    if (!this.dependencies) throw new Error("DOWNLOADER_DEPENDENCIES_REQUIRED");
+    return this.dependencies;
+  }
+  protected get http() {
+    return this.ports.http;
   }
 
   // 检查客户端是否可以连接

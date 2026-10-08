@@ -11,7 +11,7 @@ import {
   IUserInfo,
   TLevelId,
 } from "../types";
-import { guessUserLevelId, store } from "../utils";
+import { guessUserLevelId } from "../utils";
 import NexusPHP, {
   CategoryInclbookmarked,
   CategoryIncldead,
@@ -345,7 +345,7 @@ export default class Hdsky extends NexusPHP {
 
       const linkCreatedTime = this.runQueryFilters(torrent.link, [{ name: "querystring", args: ["t"] }]) as string;
 
-      const currentTimestamp = Date.now() / 1000;
+      const currentTimestamp = this.ports.clock.now() / 1000;
       const expiredTimestamp = parseInt(linkCreatedTime || "0") + 10 * 60; // 这里假定下载链接有效期10分钟（具体不明）
 
       if (currentTimestamp < expiredTimestamp) {
@@ -400,7 +400,9 @@ export default class Hdsky extends NexusPHP {
         judgeLevelRequirements = oldUserLevelRequirements;
 
         // 将旧的用户等级要求存储到 metadataStore.sites.hdsky.merge.levelRequirements 中，以便于展示
-        store(this.metadata.id, "levelRequirements", judgeLevelRequirements, "merge").catch();
+        void this.ports.settings
+          .store(this.metadata.id, "levelRequirements", judgeLevelRequirements, "merge")
+          .catch(() => this.ports.logger.warn("site runtime settings save failed"));
       }
     }
 

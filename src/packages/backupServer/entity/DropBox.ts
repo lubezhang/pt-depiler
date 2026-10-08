@@ -11,7 +11,6 @@
  */
 
 import { merge } from "es-toolkit";
-import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
 
 import AbstractBackupServer from "../AbstractBackupServer.ts";
@@ -95,7 +94,7 @@ export default class DropBox extends AbstractBackupServer<DropBoxConfig> {
   }
 
   private async request<T>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return axios.request<T>(
+    return this.http.request<T>(
       merge(
         {
           method: "POST",

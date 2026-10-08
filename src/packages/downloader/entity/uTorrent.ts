@@ -12,7 +12,6 @@ import {
   CAddTorrentResult,
 } from "../types";
 import urlJoin from "url-join";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
 import { extractMagnetHash, getRemoteTorrentFile } from "../utils";
 
 export const clientConfig: TorrentClientConfig = {
@@ -157,7 +156,7 @@ export default class UTorrent extends AbstractBittorrentClient<TorrentClientConf
   }
 
   private async login(): Promise<boolean> {
-    const req = await axios.get<string>("/token.html", {
+    const req = await this.http.get<string>("/token.html", {
       baseURL: this.address,
       params: {
         t: Date.now().toString(),
@@ -210,7 +209,7 @@ export default class UTorrent extends AbstractBittorrentClient<TorrentClientConf
     }
 
     return (
-      await axios.get<T>(this.address, {
+      await this.http.get<T>(this.address, {
         params: {
           token: _sid,
           t: Date.now().toString(),
@@ -245,17 +244,20 @@ export default class UTorrent extends AbstractBittorrentClient<TorrentClientConf
       torrentInfoHash = extractMagnetHash(url);
     } else {
       params.action = "add-file";
-      const torrent = await getRemoteTorrentFile({
-        url,
-        ...(options.localDownloadOption || {}),
-      });
+      const torrent = await getRemoteTorrentFile(
+        {
+          url,
+          ...(options.localDownloadOption || {}),
+        },
+        this.ports.torrentHttp,
+      );
 
       torrentInfoHash = torrent.info?.infoHash;
 
       formData.append("torrent_file", torrent.metadata.blob(), torrent.name);
     }
 
-    await axios.post<BaseUtorrentResponse>(this.address, formData, {
+    await this.http.post<BaseUtorrentResponse>(this.address, formData, {
       params: params,
       auth: {
         username: this.config.username,

@@ -164,7 +164,9 @@ fn configured_site(metadata: &Value, resource_id: &str, url: &Url) -> bool {
     let site_id = if resource_id == "site:legacy" {
         mapped
     } else {
-        mapped.filter(|mapped_id| *mapped_id == resource_id)
+        mapped.filter(|mapped_id| {
+            *mapped_id == resource_id.strip_prefix("site:").unwrap_or(resource_id)
+        })
     };
     site_id.is_some_and(|id| {
         let site = metadata.get("sites").and_then(|sites| sites.get(id));
@@ -211,7 +213,7 @@ fn public_service(resource_id: &str, url: &Url) -> bool {
 }
 
 fn configured_public_backup(metadata: &Value, resource_id: &str, url: &Url) -> bool {
-    if resource_id != "backup:legacy" || url.scheme() != "https" || url.port().is_some() {
+    if !resource_id.starts_with("backup:") || url.scheme() != "https" || url.port().is_some() {
         return false;
     }
     let Some(host) = url.host_str() else {
@@ -245,9 +247,15 @@ fn configured_public_backup(metadata: &Value, resource_id: &str, url: &Url) -> b
         .get("backupServers")
         .and_then(Value::as_object)
         .is_some_and(|servers| {
-            servers
-                .values()
-                .any(|server| server.get("type").and_then(Value::as_str) == Some(kind))
+            if resource_id == "backup:legacy" {
+                servers
+                    .values()
+                    .any(|server| server.get("type").and_then(Value::as_str) == Some(kind))
+            } else {
+                servers
+                    .get(resource_id.trim_start_matches("backup:"))
+                    .is_some_and(|server| server.get("type").and_then(Value::as_str) == Some(kind))
+            }
         })
 }
 
@@ -398,6 +406,58 @@ pub async fn resolve_connection(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn ap_14_explicit_site_identity_and_ap_15_backup_provider_identity_follow_configuration() {
+        let policy = HttpPolicy;
+        let mut metadata = serde_json::json!({"sites":{"tracker":{"url":"https://tracker.example/"}},
+            "siteHostMap":{"tracker.example":"tracker"},"backupServers":{"drive":{"type":"GoogleDrive"},"dropbox":{"type":"DropBox"}}});
+        assert!(policy
+            .validate(
+                &metadata,
+                "site:tracker",
+                &reqwest::Method::GET,
+                "https://tracker.example/"
+            )
+            .is_ok());
+        assert!(policy
+            .validate(
+                &metadata,
+                "backup:drive",
+                &reqwest::Method::POST,
+                "https://www.googleapis.com/oauth2/v4/token"
+            )
+            .is_ok());
+        assert!(policy
+            .validate(
+                &metadata,
+                "backup:dropbox",
+                &reqwest::Method::POST,
+                "https://www.googleapis.com/oauth2/v4/token"
+            )
+            .is_err());
+        metadata["backupServers"]
+            .as_object_mut()
+            .unwrap()
+            .remove("drive");
+        assert!(policy
+            .validate(
+                &metadata,
+                "backup:drive",
+                &reqwest::Method::POST,
+                "https://www.googleapis.com/oauth2/v4/token"
+            )
+            .is_err());
+        metadata["sites"]["tracker"]["url"] = serde_json::Value::from("https://new.example/");
+        assert!(policy
+            .validate(
+                &metadata,
+                "site:tracker",
+                &reqwest::Method::GET,
+                "https://tracker.example/"
+            )
+            .is_err());
+    }
 
     #[test]
     fn ap_05_rejects_forged_and_deleted_resources() {

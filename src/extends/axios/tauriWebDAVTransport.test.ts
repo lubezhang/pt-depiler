@@ -1,3 +1,5 @@
+import { downloaderDependencies } from "@/offscreen/adapter/downloader.ts";
+import { backupServerDependencies } from "@/offscreen/adapter/backupServer.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -63,7 +65,7 @@ function createWebDAV(digest = false): WebDAV {
       loginPwd: "backup-password",
       digest,
     },
-  });
+  }).configure(backupServerDependencies());
 }
 
 describe("WebDAV Tauri transport", () => {
@@ -109,10 +111,10 @@ describe("WebDAV Tauri transport", () => {
       },
     ]);
 
-    const backup: IBackupData = { settings: { theme: "dark", language: "zh-CN" } };
+    const backup: IBackupData = { config: { theme: "dark", language: "zh-CN" } };
     await expect(client.addFile("backup.zip", backup)).resolves.toBe(true);
     expect(uploadedZip).not.toBe("");
-    await expect(client.getFile("backup.zip")).resolves.toMatchObject({ settings: backup.settings });
+    await expect(client.getFile("backup.zip")).resolves.toMatchObject({ config: backup.config });
     await expect(client.deleteFile("backup.zip")).resolves.toBe(true);
 
     const [list, upload, download, remove] = requests();

@@ -18,7 +18,6 @@ import {
   TorrentClientStatus,
   CAddTorrentResult,
 } from "../types";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
 import { AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 import urlJoin from "url-join";
 import { getRemoteTorrentFile } from "../utils";
@@ -293,7 +292,7 @@ export default class Flood extends AbstractBittorrentClient {
   private async getEndPointType(): Promise<FloodApiType> {
     if (this.apiType == null) {
       try {
-        await axios.get(FloodApiEndpointMap.legacy.verify, {
+        await this.http.get(FloodApiEndpointMap.legacy.verify, {
           baseURL: this.config.address,
           timeout: this.config.timeout,
         });
@@ -314,7 +313,7 @@ export default class Flood extends AbstractBittorrentClient {
     const endPointUrl = await this.getEndPointUrl(endpoint);
 
     try {
-      return await axios.request<T>({
+      return await this.http.request<T>({
         baseURL: this.config.address,
         url: endPointUrl,
         timeout: this.config.timeout,
@@ -392,10 +391,13 @@ export default class Flood extends AbstractBittorrentClient {
         });
       } else {
         const endPointType = await this.getEndPointType();
-        const torrent = await getRemoteTorrentFile({
-          url,
-          ...(options.localDownloadOption || {}),
-        });
+        const torrent = await getRemoteTorrentFile(
+          {
+            url,
+            ...(options.localDownloadOption || {}),
+          },
+          this.ports.torrentHttp,
+        );
 
         if (endPointType === "jesec") {
           postData.files = [torrent.metadata.base64()];

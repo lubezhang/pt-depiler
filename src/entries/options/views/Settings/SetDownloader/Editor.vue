@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { downloaderDependencies } from "@/offscreen/adapter/downloader.ts";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { computedAsync } from "@vueuse/core";
@@ -27,7 +28,7 @@ const formValid = ref<boolean>(false);
 
 async function checkConnect() {
   if (formValid) {
-    const client = await getDownloader(clientConfig.value!);
+    const client = await getDownloader(clientConfig.value!, downloaderDependencies(clientConfig.value!.id));
     return await client.ping();
   }
   return false;

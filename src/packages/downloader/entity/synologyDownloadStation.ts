@@ -15,7 +15,6 @@ import {
   CAddTorrentResult,
 } from "../types";
 import urlJoin from "url-join";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig } from "axios";
 import { getRemoteTorrentFile } from "../utils";
 
@@ -387,7 +386,7 @@ export default class SynologyDownloadStation extends AbstractBittorrentClient<To
   // 核心请求方法
   private async request<T>(cgi: SYNOApiCGIPath, config: AxiosRequestConfig): Promise<SynologyResponse<T>> {
     return (
-      await axios.request<SynologyResponse<T>>({
+      await this.http.request<SynologyResponse<T>>({
         baseURL: this.config.address,
         url: urlJoin("webapi", cgi),
         timeout: this.config.timeout,
@@ -532,10 +531,13 @@ export default class SynologyDownloadStation extends AbstractBittorrentClient<To
       postData = transObjToData(params, true);
 
       // 获得本地请求的种子内容
-      const torrent = await getRemoteTorrentFile({
-        url,
-        ...(options.localDownloadOption || {}),
-      });
+      const torrent = await getRemoteTorrentFile(
+        {
+          url,
+          ...(options.localDownloadOption || {}),
+        },
+        this.ports.torrentHttp,
+      );
 
       postData.append("torrent", torrent.metadata.blob(), torrent.name);
     }

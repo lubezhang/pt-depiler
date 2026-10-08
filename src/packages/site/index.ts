@@ -1,3 +1,5 @@
+import type { SiteDependencies } from "./ports.ts";
+export type { SiteDependencies } from "./ports.ts";
 import { cloneDeep } from "es-toolkit";
 
 export * from "./types";
@@ -72,6 +74,7 @@ export function checkSiteMetadataAllow(siteMetadata: ISiteMetadata, key: keyof I
 export async function getSite<TYPE extends "private" | "public">(
   siteId: TSiteID,
   userConfig: ISiteUserConfig = {},
+  dependencies?: SiteDependencies,
 ): Promise<TYPE extends "private" ? PrivateSite : BittorrentSite> {
   let SiteClass,
     siteMetadata = {} as ISiteMetadata;
@@ -107,5 +110,7 @@ export async function getSite<TYPE extends "private" | "public">(
   userConfig.showMessageCount ??= checkSiteMetadataAllow(siteMetadata, "userInfo");
 
   // @ts-ignore
-  return new SiteClass(siteMetadata, userConfig);
+  const site = new SiteClass(siteMetadata, userConfig);
+  if (!dependencies) throw new Error("SITE_DEPENDENCIES_REQUIRED");
+  return site.configure(dependencies);
 }

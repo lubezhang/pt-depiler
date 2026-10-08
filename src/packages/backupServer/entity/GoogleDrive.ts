@@ -19,7 +19,6 @@
  */
 import urlJoin from "url-join";
 import { sleep } from "~/helper.ts";
-import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
 import { AxiosError, type AxiosRequestConfig, type AxiosResponse } from "axios";
 
 import AbstractBackupServer from "../AbstractBackupServer.ts";
@@ -102,7 +101,7 @@ export default class GoogleDrive extends AbstractBackupServer<GoogleDriveConfig>
 
   private async fetchAccessToken(): Promise<AuthInformation> {
     if (this.accessInformation === undefined || this.accessInformation.expired_at < Date.now()) {
-      const { data } = await axios.post<AuthInformationResponse>(
+      const { data } = await this.http.post<AuthInformationResponse>(
         "https://www.googleapis.com/oauth2/v4/token",
         new URLSearchParams({
           client_id: this.userConfig.client_id,
@@ -126,7 +125,7 @@ export default class GoogleDrive extends AbstractBackupServer<GoogleDriveConfig>
     };
 
     try {
-      return axios.request<T>(config);
+      return this.http.request<T>(config);
     } catch (e) {
       const response = (e as AxiosError<ErrorResponse>).response!;
       if (response.data) {

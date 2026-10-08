@@ -1,4 +1,9 @@
-import { AbstractBittorrentClient, type DownloaderBaseConfig, type TorrentClientMetaData } from "./types";
+import {
+  AbstractBittorrentClient,
+  type DownloaderDependencies,
+  type DownloaderBaseConfig,
+  type TorrentClientMetaData,
+} from "./types";
 import { cloneDeep } from "es-toolkit";
 
 export * from "./types";
@@ -33,11 +38,14 @@ export async function getDownloaderMetaData(type: string): Promise<TorrentClient
   return cloneDeep((await getDownloaderModule(type)).clientMetaData);
 }
 
-export async function getDownloader(config: DownloaderBaseConfig): Promise<AbstractBittorrentClient> {
+export async function getDownloader(
+  config: DownloaderBaseConfig,
+  dependencies: DownloaderDependencies,
+): Promise<AbstractBittorrentClient> {
   const DownloaderClass = (await getDownloaderModule(config.type)).default;
 
   // @ts-ignore
-  return new DownloaderClass(config);
+  return new DownloaderClass(config).configure(dependencies);
 }
 
 export function getDownloaderIcon(type: string) {

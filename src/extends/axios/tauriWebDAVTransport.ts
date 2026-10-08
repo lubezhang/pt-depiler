@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosInstance } from "axios";
 import { getPatcher } from "webdav";
 
 import { tauriAdapter } from "./tauriAdapter.ts";
@@ -30,12 +30,18 @@ function responseHeaders(headers: unknown): Headers {
  * webdav-client keeps its DAV parsing and Digest state machine, while this fetch
  * implementation sends the actual HTTP request through the Tauri IPC adapter.
  */
+const webDAVResources = new Map<string, AxiosInstance>();
+export function registerTauriWebDAVResource(address: string, client: AxiosInstance): void {
+  webDAVResources.set(new URL(address).origin, client);
+}
+
 export async function tauriWebDAVFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = input instanceof Request ? input.url : input.toString();
   const method = init?.method ?? (input instanceof Request ? input.method : "GET");
   const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
-  const response = await axios.request<ArrayBuffer>({
-    adapter: tauriAdapter,
+  const client = webDAVResources.get(new URL(url).origin) ?? axios;
+  const response = await client.request<ArrayBuffer>({
+    ...(client === axios ? { adapter: tauriAdapter } : {}),
     data: await resolveBody(input, init),
     headers: mergeHeaders(input, init),
     method,

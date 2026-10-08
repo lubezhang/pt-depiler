@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { backupServerDependencies } from "@/offscreen/adapter/backupServer.ts";
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { computedAsync } from "@vueuse/core";
@@ -32,7 +33,7 @@ const formValid = ref<boolean>(false);
 async function checkConnect() {
   const clientType = clientConfig.value?.type;
   if (formValid.value && clientConfig.value && clientType) {
-    const client = await getBackupServer(clientConfig.value);
+    const client = await getBackupServer(clientConfig.value, backupServerDependencies(clientConfig.value.id));
     return await client.ping();
   }
   return false;

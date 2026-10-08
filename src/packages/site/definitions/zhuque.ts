@@ -8,7 +8,6 @@ import {
   type ITorrentTag,
   type IUserInfo,
 } from "../types";
-import { retrieveStore } from "../utils/adapter.ts";
 import PrivateSite from "../schemas/AbstractPrivateSite.ts";
 
 const categoryMap: Record<number, string> = {
@@ -308,12 +307,15 @@ export default class Zhuque extends PrivateSite {
   }
 
   private async getCsrfToken() {
-    let csrfToken = await this.retrieveRuntimeSettings("csrfToken");
+    let csrfToken = await this.retrieveRuntimeSettings<string>("csrfToken");
     if (csrfToken) {
       return csrfToken;
     } else {
       // 如果没有设置 csrfToken，则从扩展存储中获取（兼容之前写法）
-      const csrfToken = retrieveStore("metadata", `lastUserInfo.${this.metadata.id}.csrfToken`);
+      const csrfToken = await this.ports.settings.read<string>(
+        "metadata",
+        `lastUserInfo.${this.metadata.id}.csrfToken`,
+      );
       if (csrfToken) {
         await this.storeRuntimeSettings("csrfToken", csrfToken);
         return csrfToken;

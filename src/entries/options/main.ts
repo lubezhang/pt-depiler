@@ -16,6 +16,11 @@ const app = migrationAcceptance
     : bootstrapApp();
 if (acceptance && !peer && !migrationAcceptance) {
   void app.then(async () => {
+    if (import.meta.env.VITE_STAGE_C_GUI === "1") {
+      const { runStageCMain } = await import("~/acceptance/stage-c-gui.ts");
+      await runStageCMain();
+      return;
+    }
     const { runStageAMain } = await import("~/acceptance/stage-a-gui.ts");
     await runStageAMain();
   });

@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "platform": "macOS",
+  "results": [
+    "initial-mount-after-recovery",
+    "default-export-excludes-credentials-cookies-key",
+    "wrong-key-rejected-before-active-write",
+    "default-restore-preserves-cookies",
+    "explicit-restore-converges-cookie-and-json",
+    "restore-keeps-local-backup-key",
+    "restore-completed-marker",
+    "recovery-diagnostics-exclude-sensitive-payload"
+  ],
+  "stage": "C"
+}

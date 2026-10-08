@@ -100,18 +100,6 @@ export const packageEntryImportAllowances: Record<string, TemporaryException> = 
     reason: "旧 Cookie DTO 共享类型。",
     removalTask: "DT-026",
   },
-  "src/packages/site/utils/adapter.ts:@/messages.ts": {
-    reason: "旧本地消息总线适配器。",
-    removalTask: "DT-026",
-  },
-  "src/packages/site/utils/adapter.ts:@/shared/types/storages/metadata.ts": {
-    reason: "旧 metadata DTO。",
-    removalTask: "DT-026",
-  },
-  "src/packages/site/utils/adapter.ts:@/storage.ts": {
-    reason: "旧扩展存储适配器。",
-    removalTask: "DT-026",
-  },
 };
 
 export const sideEffectImportAllowances: Record<string, TemporaryException> = {

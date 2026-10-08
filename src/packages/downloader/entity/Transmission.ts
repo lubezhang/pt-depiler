@@ -12,7 +12,6 @@ import {
   CTorrentFile,
 } from "../types";
 import urlJoin from "url-join";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
 import { type AxiosResponse, isAxiosError } from "axios";
 import { getRemoteTorrentFile } from "../utils";
 
@@ -380,10 +379,13 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
     if (url.startsWith("magnet:") || !options.localDownload) {
       addTorrentOptions.filename = url;
     } else {
-      const torrent = await getRemoteTorrentFile({
-        url,
-        ...(options.localDownloadOption || {}),
-      });
+      const torrent = await getRemoteTorrentFile(
+        {
+          url,
+          ...(options.localDownloadOption || {}),
+        },
+        this.ports.torrentHttp,
+      );
 
       addTorrentOptions.metainfo = torrent.metadata.base64();
     }
@@ -580,7 +582,7 @@ export default class Transmission extends AbstractBittorrentClient<TorrentClient
   }
 
   private async post<T>(method: TransmissionRequestMethod, args: any): Promise<AxiosResponse<T>> {
-    return await axios.post<T>(
+    return await this.http.post<T>(
       this.address,
       {
         method,

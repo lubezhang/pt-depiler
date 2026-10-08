@@ -15,7 +15,6 @@ import {
   TorrentClientStatus,
   CAddTorrentResult,
 } from "../types";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
 import urlJoin from "url-join";
 import { getRemoteTorrentFile } from "../utils";
@@ -285,7 +284,7 @@ export default class QBittorrent extends AbstractBittorrentClient<TorrentClientC
     form.append("username", this.config.username);
     form.append("password", this.config.password);
 
-    return await axios.post(urlJoin(this.config.address, "/api/v2", "/auth/login"), form, {
+    return await this.http.post(urlJoin(this.config.address, "/api/v2", "/auth/login"), form, {
       timeout: this.config.timeout,
       withCredentials: true,
     });
@@ -310,7 +309,7 @@ export default class QBittorrent extends AbstractBittorrentClient<TorrentClientC
       };
     }
 
-    return await axios.request<T>({
+    return await this.http.request<T>({
       baseURL: this.config.address,
       url: urlJoin("/api/v2", path),
       timeout: this.config.timeout,
@@ -366,10 +365,13 @@ export default class QBittorrent extends AbstractBittorrentClient<TorrentClientC
     if (url.startsWith("magnet:") || !options.localDownload) {
       formData.append("urls", url);
     } else {
-      const torrent = await getRemoteTorrentFile({
-        url,
-        ...(options.localDownloadOption || {}),
-      });
+      const torrent = await getRemoteTorrentFile(
+        {
+          url,
+          ...(options.localDownloadOption || {}),
+        },
+        this.ports.torrentHttp,
+      );
 
       formData.append("torrents", torrent.metadata.blob(), torrent.name);
     }

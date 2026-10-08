@@ -8,8 +8,6 @@
  * - 记录 applicationKeyId 和 applicationKey
  */
 
-import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
-
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import { localSort } from "../utils";
 import type { IBackupConfig, IBackupMetadata, IBackupFileListOption, IBackupFileInfo, IBackupData } from "../type";
@@ -118,7 +116,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
   // ── 授权与桶解析 ──────────────────────────────────────────────
 
   private async authorize(): Promise<void> {
-    const { data } = await axios.get<B2AuthorizeAccountResponse>(
+    const { data } = await this.http.get<B2AuthorizeAccountResponse>(
       "https://api.backblazeb2.com/b2api/v2/b2_authorize_account",
       {
         auth: {
@@ -152,7 +150,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
 
     // allowed.bucketName === null 表示该 Key 拥有 full access，需要手动查找
     // 如果 allowed.bucketName 非 null 且不匹配，说明 Key 被限制到了其他 bucket，以下查找必然失败，但仍执行以给出明确错误
-    const { data } = await axios.post<B2ListBucketsResponse>(
+    const { data } = await this.http.post<B2ListBucketsResponse>(
       `${this.apiUrl}/b2api/v2/b2_list_buckets`,
       { accountId: this.accountId },
       { headers: { Authorization: this.authToken } },
@@ -192,7 +190,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
     let hasMore = true;
 
     while (hasMore) {
-      const { data }: { data: B2ListFileNamesResponse } = await axios.post<B2ListFileNamesResponse>(
+      const { data }: { data: B2ListFileNamesResponse } = await this.http.post<B2ListFileNamesResponse>(
         `${this.apiUrl}/b2api/v2/b2_list_file_names`,
         {
           bucketId,
@@ -227,7 +225,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
     const bucketId = await this.getBucketId();
 
     // Step 1: 获取上传 URL
-    const { data: uploadData } = await axios.post<B2GetUploadUrlResponse>(
+    const { data: uploadData } = await this.http.post<B2GetUploadUrlResponse>(
       `${this.apiUrl}/b2api/v2/b2_get_upload_url`,
       { bucketId },
       { headers: { Authorization: this.authToken } },
@@ -240,7 +238,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
 
     // Step 3: 上传文件
     try {
-      const { status } = await axios.post(uploadData.uploadUrl, fileBuffer, {
+      const { status } = await this.http.post(uploadData.uploadUrl, fileBuffer, {
         headers: {
           Authorization: uploadData.authorizationToken,
           "X-Bz-File-Name": encodeURIComponent(fileName),
@@ -257,7 +255,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
   async getFile(path: string): Promise<IBackupData> {
     await this.ensureAuthorized();
 
-    const { data } = await axios.get<Blob>(
+    const { data } = await this.http.get<Blob>(
       `${this.downloadUrl}/file/${this.userConfig.bucketName}/${encodeURIComponent(path)}`,
       {
         headers: { Authorization: this.authToken },
@@ -273,7 +271,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
 
     try {
       // 通过文件名精确查找 fileId
-      const { data: listData } = await axios.post<B2ListFileNamesResponse>(
+      const { data: listData } = await this.http.post<B2ListFileNamesResponse>(
         `${this.apiUrl}/b2api/v2/b2_list_file_names`,
         {
           bucketId,
@@ -286,7 +284,7 @@ export default class BackblazeB2 extends AbstractBackupServer<BackblazeB2Config>
       const file = listData.files.find((f) => f.fileName === path);
       if (!file) return false;
 
-      const { data: deleteData } = await axios.post<B2DeleteFileResponse>(
+      const { data: deleteData } = await this.http.post<B2DeleteFileResponse>(
         `${this.apiUrl}/b2api/v2/b2_delete_file_version`,
         { fileName: path, fileId: file.fileId },
         { headers: { Authorization: this.authToken } },

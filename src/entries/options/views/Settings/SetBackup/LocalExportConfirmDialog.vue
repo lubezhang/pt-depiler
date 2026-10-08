@@ -8,13 +8,19 @@ import { sendMessage } from "@/messages.ts";
 const showDialog = defineModel<boolean>();
 const { t } = useI18n();
 
+const includeCredentials = ref(false);
 const backupFields = ref<TBackupFields[]>([]);
 
 async function doLocalExport() {
-  await sendMessage("exportBackupData", { backupFields: backupFields.value, backupServerId: "local" });
+  await sendMessage("exportBackupData", {
+    backupFields: backupFields.value,
+    backupServerId: "local",
+    includeCredentials: includeCredentials.value,
+  });
 }
 
 function dialogEnter() {
+  includeCredentials.value = false;
   backupFields.value = [...DefaultBackupFields];
 }
 </script>
@@ -29,6 +35,7 @@ function dialogEnter() {
       </v-card-title>
       <v-divider />
       <v-card-text>
+        <v-switch v-model="includeCredentials" label="包含账号凭据（需要设置备份密钥）" color="warning" />
         <v-row no-gutters>
           <v-col v-for="backupField in BackupFields" :key="backupField" cols="12" md="6">
             <v-switch

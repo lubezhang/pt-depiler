@@ -14,7 +14,7 @@
  * special thanks to: https://github.com/spro/get-website-favicon/tree/master/lib/origin
  */
 
-import axios from "axios";
+import type { AxiosInstance } from "axios";
 import type { ISiteMetadata } from "../types";
 
 // from: https://stackoverflow.com/a/9967193/8824471
@@ -102,7 +102,7 @@ function transformBlob(blob: Blob): Promise<any> {
   });
 }
 
-async function getFaviconFromUrl(url: string): Promise<Blob> {
+async function getFaviconFromUrl(url: string, axios: AxiosInstance): Promise<Blob> {
   const baseUrl = new URL(url);
 
   const { data: doc } = await axios.get<Document>(url, { responseType: "document" });
@@ -199,7 +199,7 @@ async function getFaviconFromUrl(url: string): Promise<Blob> {
 
 export type getFaviconMetadata = Required<Pick<ISiteMetadata, "id" | "urls">> & Pick<ISiteMetadata, "favicon">;
 
-export async function getFavicon(site: getFaviconMetadata): Promise<string> {
+export async function getFavicon(site: getFaviconMetadata, axios: AxiosInstance): Promise<string> {
   const { id: siteId, urls: siteUrls, favicon: siteFavicon } = site;
 
   // 1. 检查本地icons目录是否存在对应文件
@@ -234,7 +234,7 @@ export async function getFavicon(site: getFaviconMetadata): Promise<string> {
   if (!faviconMeta) {
     for (const url of siteUrls) {
       try {
-        faviconMeta = await getFaviconFromUrl(url);
+        faviconMeta = await getFaviconFromUrl(url, axios);
         break;
       } catch {}
     }

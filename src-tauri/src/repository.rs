@@ -29,8 +29,14 @@ const ROOT_DOMAINS: [&str; 6] = [
 
 #[cfg(test)]
 thread_local! {
+    static FAIL_AFTER_RESTORE_PREPARE: Cell<bool> = const { Cell::new(false) };
     static FAIL_NEXT_DIRECTORY_SYNC: Cell<bool> = const { Cell::new(false) };
     static FAIL_NEXT_LEGACY_CLEANUP: Cell<bool> = const { Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn fail_after_restore_prepare_for_test() {
+    FAIL_AFTER_RESTORE_PREPARE.with(|flag| flag.set(true));
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -55,6 +61,19 @@ pub struct Repository {
     _lock: File,
     document: Document,
     uncertain: bool,
+}
+
+impl Drop for Repository {
+    fn drop(&mut self) {
+        // A concurrent fork can briefly inherit this open file description before
+        // exec closes it. Explicitly release ownership instead of relying only
+        // on the last descriptor closing in every process.
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+            unsafe { libc::flock(self._lock.as_raw_fd(), libc::LOCK_UN) };
+        }
+    }
 }
 
 impl Repository {
@@ -114,6 +133,7 @@ impl Repository {
             "imports": self.document.imports,
             "cleanupPending": self.legacy_cleanup_pending(),
             "commitUncertain": self.uncertain,
+            "restore": self.document.records.get("restoreJournal").map(|journal| serde_json::json!({"id":journal["id"],"stage":journal["stage"]})),
         })
     }
 
@@ -123,7 +143,15 @@ impl Repository {
         self.commit_document(next)
     }
 
-    fn commit_document(&mut self, mut next: Document) -> Result<(), String> {
+    fn commit_document(&mut self, next: Document) -> Result<(), String> {
+        self.ensure_recovery_ready()?;
+        if self.path.with_file_name("cookies.v2.restore.json").exists() {
+            return Err("STORAGE_RECOVERY_REQUIRED:cookie_mirror".into());
+        }
+        self.commit_recovery_document(next)
+    }
+
+    fn commit_recovery_document(&mut self, mut next: Document) -> Result<(), String> {
         if self.uncertain {
             return Err("STORAGE_COMMIT_UNCERTAIN:blocked".into());
         }
@@ -146,6 +174,323 @@ impl Repository {
             }
             Err(error) => Err(error),
         }
+    }
+
+    pub fn ensure_recovery_ready(&self) -> Result<(), String> {
+        if self
+            .document
+            .records
+            .get("restoreJournal")
+            .is_some_and(|journal| {
+                !matches!(journal["stage"].as_str(), Some("completed" | "rolledBack"))
+            })
+        {
+            return Err("STORAGE_RECOVERY_REQUIRED:restore".into());
+        }
+        Ok(())
+    }
+
+    pub fn backup_snapshot(&self) -> Result<Value, String> {
+        self.ensure_recovery_ready()?;
+        if self.uncertain {
+            return Err("STORAGE_COMMIT_UNCERTAIN:snapshot".into());
+        }
+        let mut snapshot = Map::new();
+        for key in ROOT_DOMAINS
+            .into_iter()
+            .filter(|key| *key != "__metadataRevision")
+        {
+            snapshot.insert(key.into(), self.read(key));
+        }
+        snapshot.insert(
+            "downloadHistory".into(),
+            Value::Array(self.list_download_history()?),
+        );
+        Ok(serde_json::json!({"revision":self.revision(), "data":snapshot}))
+    }
+
+    /// All selected domains and the completion marker share one replacement.
+    /// Cookie restores use a prepared journal followed by a committed journal.
+    fn plan_restore(
+        &self,
+        expected_revision: u64,
+        values: Map<String, Value>,
+        cookies: bool,
+    ) -> Result<(Document, Map<String, Value>, String), String> {
+        self.ensure_recovery_ready()?;
+        if self.uncertain {
+            return Err("STORAGE_COMMIT_UNCERTAIN:restore".into());
+        }
+        if self.revision() != expected_revision {
+            return Err("STORAGE_CONFLICT:restore".into());
+        }
+        let mut next = self.document.clone();
+        let mut before = Map::new();
+        let mut after = Map::new();
+        for (key, value) in values {
+            if !ROOT_DOMAINS[..5].contains(&key.as_str()) && key != "downloadHistory" {
+                return Err("STORAGE_INVALID_INPUT:restore_domain".into());
+            }
+            if key == "downloadHistory" {
+                let history = history_map(
+                    value
+                        .as_array()
+                        .ok_or("STORAGE_INVALID_INPUT:history")?
+                        .clone(),
+                )?;
+                let _ = self.history()?;
+                let next_id = next_history_id(&history)?
+                    .max(self.read("downloadHistoryNextId").as_u64().unwrap_or(1));
+                next.records
+                    .insert("downloadHistoryNextId".into(), Value::from(next_id));
+                after.insert(key.clone(), Value::Object(history));
+            } else {
+                if !value.is_object() {
+                    return Err("STORAGE_INVALID_INPUT:restore_record".into());
+                }
+                after.insert(key.clone(), value);
+            }
+            before.insert(key.clone(), self.read(&key));
+        }
+        validate_restore_metadata(after.get("metadata"))?;
+        let id = self.next_restore_id()?;
+        let journal = serde_json::json!({"id":id,"stage":if cookies {"prepared"} else {"completed"},
+            "hasCookies":cookies,"before":if cookies {before.clone()} else {Map::new()},
+            "after":if cookies {after.clone()} else {Map::new()}});
+        next.records.insert("restoreJournal".into(), journal);
+        let mut final_document = next.clone();
+        final_document.records.extend(after.clone());
+        if serde_json::to_vec(&final_document)
+            .map_err(|_| "STORAGE_INVALID_INPUT:restore")?
+            .len()
+            .saturating_add(128)
+            > MAX_STATE_BYTES
+        {
+            return Err("STORAGE_CAPACITY_EXCEEDED:restore".into());
+        }
+        Ok((next, after, id))
+    }
+
+    /// Read-only IndexedDB import. A completed marker makes source cleanup retryable.
+    pub fn import_legacy_restore_journals(
+        &mut self,
+        journals: Vec<Value>,
+        histories: Vec<Value>,
+    ) -> Result<(), String> {
+        self.ensure_recovery_ready()?;
+        let mut next = self.document.clone();
+        let mut imported = self
+            .read("legacyRestoreImports")
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        for journal in journals {
+            let id = journal["id"]
+                .as_str()
+                .filter(|id| {
+                    !id.is_empty()
+                        && id.len() <= 128
+                        && id.chars().all(|character| {
+                            character.is_ascii_alphanumeric()
+                                || matches!(character, '-' | '_' | ':' | '.')
+                        })
+                })
+                .ok_or("STORAGE_INVALID_INPUT:legacy_restore_id")?;
+            if imported.contains_key(id) {
+                continue;
+            }
+            let stage = journal["stage"]
+                .as_str()
+                .ok_or("STORAGE_INVALID_INPUT:legacy_restore_stage")?;
+            if matches!(stage, "completed" | "rolledBack" | "rolled_back") {
+                imported.insert(id.into(), Value::Bool(true));
+                continue;
+            }
+            let before = journal
+                .get("storageBefore")
+                .or_else(|| journal.get("before"))
+                .and_then(Value::as_object);
+            let after = journal
+                .get("storageAfter")
+                .or_else(|| journal.get("after"))
+                .and_then(Value::as_object);
+            let mut manual = journal
+                .get("cookieOperationId")
+                .is_some_and(|id| !id.is_null())
+                || before.is_none()
+                || after.is_none();
+            if let (Some(before), Some(after)) = (before, after) {
+                if before.len() != after.len() || after.keys().any(|key| !before.contains_key(key))
+                {
+                    manual = true;
+                }
+                if validate_restore_metadata(before.get("metadata")).is_err() {
+                    manual = true;
+                }
+                for (key, previous) in before {
+                    if !ROOT_DOMAINS[..5].contains(&key.as_str()) || !after.contains_key(key) {
+                        manual = true;
+                        continue;
+                    }
+                    let current = next.records.get(key).cloned().unwrap_or(Value::Null);
+                    if current != *previous && current != after[key] {
+                        manual = true;
+                    }
+                }
+            }
+            let old_history = journal
+                .get("downloadHistoryBefore")
+                .and_then(Value::as_array);
+            let new_history = journal
+                .get("downloadHistoryAfter")
+                .and_then(Value::as_array);
+            let current_history = if self.download_history_imported() {
+                self.history()?.clone()
+            } else {
+                history_map(histories.clone())?
+            };
+            if let (Some(before), Some(after)) = (old_history, new_history) {
+                if current_history != history_map(before.clone())?
+                    && current_history != history_map(after.clone())?
+                {
+                    manual = true;
+                }
+            } else if old_history.is_some() || new_history.is_some() {
+                manual = true;
+            }
+            if manual {
+                next.records.insert("restoreJournal".into(), serde_json::json!({"id":id,"stage":"manualRecovery","hasCookies":false,"before":{},"after":{}}));
+                self.commit_recovery_document(next)?;
+                return Err("STORAGE_RECOVERY_REQUIRED:legacy_manual".into());
+            }
+            for (key, value) in before.expect("validated mirrors") {
+                if value.is_null() {
+                    next.records.remove(key);
+                } else if value.is_object() {
+                    next.records.insert(key.clone(), value.clone());
+                } else {
+                    return Err("STORAGE_INVALID_INPUT:legacy_restore_value".into());
+                }
+            }
+            if let Some(before) = old_history {
+                let history = history_map(before.clone())?;
+                let next_id = next_history_id(&history)?
+                    .max(self.read("downloadHistoryNextId").as_u64().unwrap_or(1));
+                next.records
+                    .insert("downloadHistory".into(), Value::Object(history));
+                next.records
+                    .insert("downloadHistoryNextId".into(), Value::from(next_id));
+                next.imports.insert(
+                    "downloadHistory".into(),
+                    serde_json::json!({"source":"indexeddb-restore","sourceVersion":1}),
+                );
+            }
+            imported.insert(id.into(), Value::Bool(true));
+        }
+        next.imports.insert(
+            "legacyRestoreJournal".into(),
+            serde_json::json!({"source":"indexeddb","sourceVersion":1}),
+        );
+        next.records
+            .insert("legacyRestoreImports".into(), Value::Object(imported));
+        if next.records != self.document.records {
+            self.commit_recovery_document(next)?;
+        }
+        Ok(())
+    }
+
+    pub fn validate_restore_backup(
+        &self,
+        revision: u64,
+        values: Map<String, Value>,
+        cookies: bool,
+    ) -> Result<(), String> {
+        self.plan_restore(revision, values, cookies).map(|_| ())
+    }
+
+    pub fn restore_backup(
+        &mut self,
+        revision: u64,
+        values: Map<String, Value>,
+        cookies: bool,
+    ) -> Result<String, String> {
+        let (mut next, after, id) = self.plan_restore(revision, values, cookies)?;
+        if cookies {
+            self.commit_recovery_document(next)?;
+            #[cfg(test)]
+            if FAIL_AFTER_RESTORE_PREPARE.with(|flag| flag.replace(false)) {
+                return Err("STORAGE_UNAVAILABLE:restore_prepare_injected".into());
+            }
+            next = self.document.clone();
+            next.records.extend(after);
+            next.records["restoreJournal"]["stage"] = Value::from("jsonCommitted");
+            self.commit_recovery_document(next)?;
+        } else {
+            next.records.extend(after);
+            self.commit_recovery_document(next)?;
+        }
+        Ok(id)
+    }
+
+    pub fn next_restore_id(&self) -> Result<String, String> {
+        let operation = self
+            .document
+            .operation_id
+            .checked_add(1)
+            .ok_or("STORAGE_CAPACITY_EXCEEDED:restore_id")?;
+        Ok(format!("restore-{operation}"))
+    }
+
+    pub fn restore_journal(&self) -> Value {
+        self.read("restoreJournal")
+    }
+
+    pub fn mark_restore_manual(&mut self) -> Result<(), String> {
+        let mut next = self.document.clone();
+        next.records["restoreJournal"]["stage"] = Value::from("manualRecovery");
+        self.commit_recovery_document(next)
+    }
+
+    pub fn finish_restore(&mut self, id: &str, rollback: bool) -> Result<(), String> {
+        let journal = self.restore_journal();
+        if journal["id"].as_str() != Some(id) {
+            return Err("STORAGE_CONFLICT:restore_id".into());
+        }
+        if matches!(journal["stage"].as_str(), Some("completed" | "rolledBack")) {
+            return Ok(());
+        }
+        let before = journal["before"]
+            .as_object()
+            .ok_or("STORAGE_CORRUPT:restore_before")?;
+        let after = journal["after"]
+            .as_object()
+            .ok_or("STORAGE_CORRUPT:restore_after")?;
+        let expected = if journal["stage"] == "prepared" {
+            before
+        } else {
+            after
+        };
+        if expected.iter().any(|(key, value)| self.read(key) != *value) {
+            let mut next = self.document.clone();
+            next.records["restoreJournal"]["stage"] = Value::from("manualRecovery");
+            self.commit_recovery_document(next)?;
+            return Err("STORAGE_CONFLICT:restore_manual".into());
+        }
+        let mut next = self.document.clone();
+        if rollback {
+            for (key, value) in before {
+                if value.is_null() {
+                    next.records.remove(key);
+                } else {
+                    next.records.insert(key.clone(), value.clone());
+                }
+            }
+        } else if journal["stage"] == "prepared" {
+            return Err("STORAGE_RECOVERY_REQUIRED:prepared".into());
+        }
+        next.records.insert("restoreJournal".into(), serde_json::json!({"id":id,
+            "hasCookies":journal["hasCookies"],"stage":if rollback {"rolledBack"} else {"completed"}}));
+        self.commit_recovery_document(next)
     }
 
     pub fn download_history_imported(&self) -> bool {
@@ -725,6 +1070,37 @@ fn parse_document(bytes: &[u8]) -> Result<Document, String> {
             return Err("STORAGE_CORRUPT:records".into());
         }
     }
+    if let Some(journal) = document.records.get("restoreJournal") {
+        if !journal["id"].as_str().is_some_and(|id| {
+            !id.is_empty()
+                && id.len() <= 128
+                && id.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | ':' | '.')
+                })
+        }) || !journal["hasCookies"].is_boolean()
+            || !matches!(
+                journal["stage"].as_str(),
+                Some("prepared" | "jsonCommitted" | "completed" | "rolledBack" | "manualRecovery")
+            )
+        {
+            return Err("STORAGE_CORRUPT:restore_journal".into());
+        }
+        if matches!(
+            journal["stage"].as_str(),
+            Some("prepared" | "jsonCommitted")
+        ) {
+            for mirror in ["before", "after"] {
+                let values = journal[mirror]
+                    .as_object()
+                    .ok_or("STORAGE_CORRUPT:restore_mirror")?;
+                if values.keys().any(|key| {
+                    !ROOT_DOMAINS[..5].contains(&key.as_str()) && key != "downloadHistory"
+                }) {
+                    return Err("STORAGE_CORRUPT:restore_domain".into());
+                }
+            }
+        }
+    }
     if document.imports.contains_key("downloadHistory") {
         let history = document
             .records
@@ -757,6 +1133,63 @@ fn parse_document(bytes: &[u8]) -> Result<Document, String> {
         }
     }
     Ok(document)
+}
+
+fn validate_restore_metadata(metadata: Option<&Value>) -> Result<(), String> {
+    let Some(metadata) = metadata else {
+        return Ok(());
+    };
+    for collection in [
+        "sites",
+        "downloaders",
+        "backupServers",
+        "mediaServers",
+        "solutions",
+        "snapshots",
+    ] {
+        let Some(value) = metadata.get(collection) else {
+            continue;
+        };
+        let items = value
+            .as_object()
+            .ok_or("STORAGE_INVALID_INPUT:metadata_collection")?;
+        for (id, item) in items {
+            if id.is_empty()
+                || !item.is_object()
+                || item
+                    .get("id")
+                    .is_some_and(|value| value.as_str() != Some(id))
+            {
+                return Err("STORAGE_INVALID_INPUT:metadata_id".into());
+            }
+        }
+    }
+    if let Some(map) = metadata.get("siteHostMap") {
+        for (host, id) in map
+            .as_object()
+            .ok_or("STORAGE_INVALID_INPUT:site_host_map")?
+        {
+            let url = url::Url::parse(&format!("https://{host}/"))
+                .map_err(|_| "STORAGE_INVALID_INPUT:site_host")?;
+            if url.host_str() != Some(host)
+                || url.port().is_some()
+                || !id
+                    .as_str()
+                    .is_some_and(|id| metadata["sites"].get(id).is_some())
+            {
+                return Err("STORAGE_INVALID_INPUT:site_reference".into());
+            }
+        }
+    }
+    if let Some(id) = metadata
+        .pointer("/defaultDownloader/id")
+        .and_then(Value::as_str)
+    {
+        if !id.is_empty() && metadata["downloaders"].get(id).is_none() {
+            return Err("STORAGE_INVALID_INPUT:downloader_reference".into());
+        }
+    }
+    Ok(())
 }
 
 fn validate_history(history: &Value, id: u64) -> Result<(), String> {
@@ -989,6 +1422,212 @@ fn lock_exclusive(_file: &File) -> Result<(), String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn ap_11_repository_drop_releases_lock_with_an_inherited_descriptor() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo = Repository::open(directory.path()).unwrap();
+        let inherited = repo._lock.try_clone().unwrap();
+        assert!(Repository::open(directory.path()).is_err());
+        drop(repo);
+        let reopened = Repository::open(directory.path()).unwrap();
+        drop(inherited);
+        drop(reopened);
+    }
+
+    #[test]
+    fn ap_13_backup_snapshot_has_one_revision_and_excludes_recovery_payload() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        repo.import_download_history(vec![]).unwrap();
+        repo.restore_backup(
+            repo.revision(),
+            json!({"config":{"theme":"dark"},"downloadHistory":[{"id":1,"downloadStatus":"completed"}]})
+                .as_object().unwrap().clone(),
+            false,
+        ).unwrap();
+        let snapshot = repo.backup_snapshot().unwrap();
+        assert_eq!(snapshot["revision"], repo.revision());
+        assert_eq!(snapshot["data"]["config"]["theme"], "dark");
+        assert_eq!(
+            snapshot["data"]["downloadHistory"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(snapshot["data"].get("restoreJournal").is_none());
+        assert!(snapshot["data"].get("cookies").is_none());
+        repo.document
+            .records
+            .insert("restoreJournal".into(), json!({"stage":"manualRecovery"}));
+        assert!(repo
+            .backup_snapshot()
+            .unwrap_err()
+            .starts_with("STORAGE_RECOVERY_REQUIRED"));
+    }
+
+    #[test]
+    fn ap_11_restore_commits_history_config_and_marker_together_and_checks_revision() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        repo.import_download_history(vec![json!({"id":1,"downloadStatus":"completed"})])
+            .unwrap();
+        let revision = repo.revision();
+        let values = json!({"config":{"theme":"dark"},"downloadHistory":[]})
+            .as_object()
+            .unwrap()
+            .clone();
+        repo.restore_backup(revision, values.clone(), false)
+            .unwrap();
+        assert_eq!(repo.revision(), revision + 1);
+        assert_eq!(repo.read("config")["theme"], "dark");
+        assert!(repo.list_download_history().unwrap().is_empty());
+        assert_eq!(repo.restore_journal()["stage"], "completed");
+        assert!(repo
+            .restore_backup(revision, values, false)
+            .unwrap_err()
+            .starts_with("STORAGE_CONFLICT"));
+        drop(repo);
+        let repo = Repository::open(directory.path()).unwrap();
+        assert!(repo.list_download_history().unwrap().is_empty());
+        assert_eq!(repo.restore_journal()["stage"], "completed");
+    }
+
+    #[test]
+    fn ap_11_invalid_history_and_metadata_leave_disk_and_active_values_untouched() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        repo.import_download_history(vec![json!({"id":1,"downloadStatus":"completed"})])
+            .unwrap();
+        let original = fs::read(&repo.path).unwrap();
+        for values in [
+            json!({"config":{},"downloadHistory":[{"id":1,"downloadStatus":"completed"},{"id":1,"downloadStatus":"completed"}]}),
+            json!({"metadata":{"sites":{},"siteHostMap":{"tracker.example":"missing"}}}),
+            json!({"metadata":{"downloaders":{"a":{"id":"b"}}}}),
+            json!({"tasks":{}}),
+        ] {
+            assert!(repo
+                .restore_backup(repo.revision(), values.as_object().unwrap().clone(), true)
+                .is_err());
+            assert_eq!(fs::read(&repo.path).unwrap(), original);
+            assert!(repo.restore_journal().is_null());
+        }
+    }
+
+    #[test]
+    fn ap_11_prepared_restart_rolls_back_and_blocks_other_writers() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        repo.import_download_history(vec![]).unwrap();
+        FAIL_AFTER_RESTORE_PREPARE.with(|flag| flag.set(true));
+        assert!(repo
+            .restore_backup(
+                repo.revision(),
+                json!({"config":{"theme":"dark"}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                true
+            )
+            .is_err());
+        assert!(repo
+            .commit(repo.records().clone())
+            .unwrap_err()
+            .starts_with("STORAGE_RECOVERY_REQUIRED"));
+        drop(repo);
+        let mut repo = Repository::open(directory.path()).unwrap();
+        let id = repo.restore_journal()["id"].as_str().unwrap().to_owned();
+        repo.finish_restore(&id, true).unwrap();
+        assert!(repo.read("config").is_null());
+        repo.finish_restore(&id, true).unwrap();
+        assert_eq!(repo.restore_journal()["stage"], "rolledBack");
+    }
+
+    #[test]
+    fn ap_11_compensation_preserves_concurrent_history_and_keeps_manual_marker() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        repo.import_download_history(vec![]).unwrap();
+        let id = repo
+            .restore_backup(
+                repo.revision(),
+                json!({"downloadHistory":[{"id":1,"downloadStatus":"completed"}]})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                true,
+            )
+            .unwrap();
+        // Simulate an older writer outside the Repository before a restart.
+        repo.document.records["downloadHistory"]["2"] = json!({"id":2,"downloadStatus":"pending"});
+        assert!(repo
+            .finish_restore(&id, true)
+            .unwrap_err()
+            .starts_with("STORAGE_CONFLICT"));
+        assert_eq!(repo.list_download_history().unwrap().len(), 2);
+        assert_eq!(repo.restore_journal()["stage"], "manualRecovery");
+    }
+
+    #[test]
+    fn ap_11_sync_failure_reconciles_completion_without_replaying_restore() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        repo.import_download_history(vec![]).unwrap();
+        FAIL_NEXT_DIRECTORY_SYNC.with(|flag| flag.set(true));
+        assert!(repo
+            .restore_backup(
+                repo.revision(),
+                json!({"config":{"theme":"dark"}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                false
+            )
+            .unwrap_err()
+            .starts_with("STORAGE_COMMIT_UNCERTAIN"));
+        assert!(repo.reconcile().unwrap());
+        assert_eq!(repo.read("config")["theme"], "dark");
+        assert_eq!(repo.restore_journal()["stage"], "completed");
+    }
+
+    #[test]
+    fn ap_11_legacy_history_compensation_import_is_atomic_and_idempotent() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        repo.commit(
+            json!({"config":{"theme":"restored"}})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )
+        .unwrap();
+        let log = json!({"id":"old-1","stage":"history_committed","storageBefore":{"config":{"theme":"original"}},"storageAfter":{"config":{"theme":"restored"}},
+            "downloadHistoryBefore":[],"downloadHistoryAfter":[{"id":1,"downloadStatus":"completed"}]});
+        repo.import_legacy_restore_journals(
+            vec![log.clone()],
+            vec![json!({"id":1,"downloadStatus":"completed"})],
+        )
+        .unwrap();
+        assert_eq!(repo.read("config")["theme"], "original");
+        assert!(repo.list_download_history().unwrap().is_empty());
+        let revision = repo.revision();
+        repo.import_legacy_restore_journals(vec![log], vec![])
+            .unwrap();
+        assert_eq!(repo.revision(), revision);
+    }
+
+    #[test]
+    fn ap_11_legacy_unknown_or_conflicting_logs_block_writes_and_preserve_values() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut repo = Repository::open(directory.path()).unwrap();
+        assert!(repo
+            .import_legacy_restore_journals(vec![json!({"id":"old-1","stage":"failed"})], vec![])
+            .is_err());
+        assert_eq!(repo.restore_journal()["stage"], "manualRecovery");
+        assert!(repo.commit(repo.records().clone()).is_err());
+        assert!(repo.read("config").is_null());
+    }
 
     #[test]
     fn ap_06_imports_json_once_and_never_revives_an_empty_domain() {

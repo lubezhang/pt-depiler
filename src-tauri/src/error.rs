@@ -14,6 +14,8 @@ pub enum AppErrorCode {
     ValidationFailed,
     StorageConflict,
     StorageUnavailable,
+    StorageRecoveryRequired,
+    StorageCommitUncertain,
     HttpPolicyRejected,
     HttpResponseTooLarge,
     HttpRequestCancelled,
@@ -54,6 +56,16 @@ impl AppErrorDto {
     pub fn ipc(error: &str, operation_id: String, resource_id: Option<String>) -> Self {
         let (code, message) = if error.starts_with("STORAGE_CONFLICT") {
             (AppErrorCode::StorageConflict, "配置已被修改，请重读后重试")
+        } else if error.starts_with("STORAGE_RECOVERY_REQUIRED") {
+            (
+                AppErrorCode::StorageRecoveryRequired,
+                "恢复尚未完成，请保留恢复资料并重启；冲突需人工处理",
+            )
+        } else if error.starts_with("STORAGE_COMMIT_UNCERTAIN") {
+            (
+                AppErrorCode::StorageCommitUncertain,
+                "提交结果待核对，请重启后确认",
+            )
         } else if error.starts_with("STORAGE_INVALID") || error.starts_with("STORAGE_CONDITIONAL") {
             (AppErrorCode::IpcInvalidInput, "存储输入无效")
         } else if error.starts_with("STORAGE_") {

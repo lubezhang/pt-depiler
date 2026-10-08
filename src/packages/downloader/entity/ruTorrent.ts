@@ -13,7 +13,6 @@ import {
   TorrentClientStatus,
   CAddTorrentResult,
 } from "../types";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
 import { getRemoteTorrentFile } from "../utils";
 
@@ -130,7 +129,7 @@ export default class RuTorrent extends AbstractBittorrentClient<TorrentClientCon
   }
 
   async request<T>(config: AxiosRequestConfig = {}): Promise<AxiosResponse<T>> {
-    return await axios.request({
+    return await this.http.request({
       baseURL: this.config.address,
       auth: {
         username: this.config.username,
@@ -205,10 +204,13 @@ export default class RuTorrent extends AbstractBittorrentClient<TorrentClientCon
     } else {
       postData = new FormData();
 
-      const torrent = await getRemoteTorrentFile({
-        url,
-        ...(options.localDownloadOption || {}),
-      });
+      const torrent = await getRemoteTorrentFile(
+        {
+          url,
+          ...(options.localDownloadOption || {}),
+        },
+        this.ports.torrentHttp,
+      );
 
       postData.append("torrent_file", torrent.metadata.blob(), torrent.name);
     }

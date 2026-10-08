@@ -14,7 +14,6 @@ import {
   CAddTorrentResult,
 } from "../types";
 import urlJoin from "url-join";
-import { legacyDownloaderHttp as axios } from "~/extends/axios/resourceClient.ts";
 import { getRemoteTorrentFile } from "../utils";
 
 export const clientConfig: DownloaderBaseConfig = {
@@ -324,10 +323,13 @@ export default class Deluge extends AbstractBittorrentClient {
       // 文件 add_torrent_file
       method = "core.add_torrent_file";
 
-      const torrent = await getRemoteTorrentFile({
-        url,
-        ...(options.localDownloadOption || {}),
-      });
+      const torrent = await getRemoteTorrentFile(
+        {
+          url,
+          ...(options.localDownloadOption || {}),
+        },
+        this.ports.torrentHttp,
+      );
 
       params = ["", torrent.metadata.base64(), delugeOptions];
     }
@@ -460,7 +462,7 @@ export default class Deluge extends AbstractBittorrentClient {
 
     const {
       data: { result },
-    } = await axios.post<DelugeDefaultResponse<T>>(
+    } = await this.http.post<DelugeDefaultResponse<T>>(
       this.address,
       {
         id: this._msgId++,

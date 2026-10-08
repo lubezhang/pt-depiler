@@ -1,4 +1,6 @@
 import axios, { type AxiosRequestConfig } from "axios";
+import { siteDependencies } from "../adapter/site.ts";
+import { downloaderDependencies } from "@/offscreen/adapter/downloader.ts";
 import { toMerged } from "es-toolkit";
 import { isEmpty } from "es-toolkit/compat";
 
@@ -29,6 +31,7 @@ import {
   DownloadHistoryQueries,
   type DownloadHistoryEvent,
 } from "~/application/download-history/service.ts";
+import { DownloadSubmission } from "~/application/download-service/submission.ts";
 import { DownloadService } from "~/application/download-service/service.ts";
 
 import { logger } from "./logger.ts";
@@ -80,8 +83,7 @@ subscribeMetadataCommits((metadata) => {
 });
 
 function getDownloaderConfigKey(config: IDownloaderMetadata): string {
-  const { id, type, address, username, password, timeout } = config;
-  return JSON.stringify({ id, type, address, username, password, timeout });
+  return JSON.stringify(config);
 }
 
 export async function getDownloaderInstance(downloaderId: string): Promise<DownloaderInstance | null> {
@@ -97,10 +99,12 @@ export async function getDownloaderInstance(downloaderId: string): Promise<Downl
     return cached.instance;
   }
 
-  const instance = await getDownloader(downloaderConfig);
+  const instance = await getDownloader(downloaderConfig, downloaderDependencies(downloaderConfig.id));
   downloaderInstanceCache.set(downloaderId, { configKey, instance });
   return instance;
 }
+
+const downloadSubmission = new DownloadSubmission({ getConfig: getDownloaderConfig, getClient: getDownloaderInstance });
 
 const downloadService = new DownloadService({
   getConfig: async (downloaderId) => {
@@ -176,7 +180,7 @@ export async function getTorrentInfoForVerification(torrent: ITorrent) {
   downloadRequestConfig.url = downloadUrl;
   downloadRequestConfig.responseType = "arraybuffer";
 
-  const parsedTorrent = await getRemoteTorrentFile(downloadRequestConfig);
+  const parsedTorrent = await getRemoteTorrentFile(downloadRequestConfig, siteDependencies(torrent.site!).http);
 
   // 返回可序列化的种子信息
   return {
@@ -456,7 +460,7 @@ async function downloadTorrentToLocalFile(
     try {
       logger({ msg: `Download torrent file with extension method: ${downloadUri}`, data: downloadRequestConfig });
 
-      const torrentInstance = await getRemoteTorrentFile(downloadRequestConfig);
+      const torrentInstance = await getRemoteTorrentFile(downloadRequestConfig, siteDependencies(torrent.site!).http);
       torrentUrl = URL.createObjectURL(torrentInstance.metadata.blob());
       let filename = torrentInstance.name;
       if (filename === "1.torrent") {
@@ -499,7 +503,11 @@ async function downloadTorrentToRemote(
     const loggerData = { torrent, downloaderId, downloadRequestConfig, addTorrentOptions } as Record<string, any>;
     try {
       logger({ msg: "downloadTorrentToDownloader", data: loggerData });
-      const addTorrentResult = await downloaderInstance.addTorrent(downloadRequestConfig.url!, addTorrentOptions);
+      const addTorrentResult = await downloadSubmission.execute(
+        downloaderId,
+        downloadRequestConfig.url!,
+        addTorrentOptions,
+      );
       loggerData.addTorrentResult = addTorrentResult;
       if (addTorrentResult?.success === true) {
         logger({ msg: "Successfully added torrent to downloader", data: loggerData });

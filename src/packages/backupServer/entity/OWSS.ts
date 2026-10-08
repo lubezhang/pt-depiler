@@ -1,5 +1,4 @@
 import urlJoin from "url-join";
-import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
 
 import AbstractBackupServer from "../AbstractBackupServer.ts";
@@ -70,7 +69,7 @@ export default class OWSS extends AbstractBackupServer<OWSSConfig> {
   }
 
   private async request<T>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-    return await axios.request<T>({
+    return await this.http.request<T>({
       baseURL: this.address,
       timeout: 45e3,
       ...config,

@@ -1,3 +1,5 @@
+import { downloaderDependencies } from "@/offscreen/adapter/downloader.ts";
+import { backupServerDependencies } from "@/offscreen/adapter/backupServer.ts";
 import axios, { type AxiosAdapter } from "axios";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -151,7 +153,7 @@ describe("Tauri adapter 的下载器与备份请求契约", () => {
       address: "http://qbittorrent.test",
       username: "",
       password: "qbt_api_key",
-    });
+    }).configure(downloaderDependencies());
 
     await expect(
       client.addTorrent("https://tracker.test/seed/download", {
@@ -181,7 +183,7 @@ describe("Tauri adapter 的下载器与备份请求契约", () => {
       address: "http://synology.test",
       username: "nas-user",
       password: "nas-password",
-    });
+    }).configure(downloaderDependencies());
 
     await expect(
       client.addTorrent("https://tracker.test/seed/download", {
@@ -205,7 +207,9 @@ describe("Tauri adapter 的下载器与备份请求契约", () => {
   });
 
   it("Flood 的 jesec URL 添加请求保持 JSON 数组", async () => {
-    const client = new Flood({ address: "http://flood.test", username: "user", password: "password" });
+    const client = new Flood({ address: "http://flood.test", username: "user", password: "password" }).configure(
+      downloaderDependencies(),
+    );
     const magnet = "magnet:?xt=urn:btih:1234567890123456789012345678901234567890";
 
     await expect(
@@ -221,7 +225,9 @@ describe("Tauri adapter 的下载器与备份请求契约", () => {
   });
 
   it("ruTorrent 保留 URLSearchParams 和 UTF-8 Basic Auth", async () => {
-    const client = new RuTorrent({ address: "https://rutorrent.test", username: "用户", password: "口令" });
+    const client = new RuTorrent({ address: "https://rutorrent.test", username: "用户", password: "口令" }).configure(
+      downloaderDependencies(),
+    );
     const magnet = "magnet:?xt=urn:btih:1234567890123456789012345678901234567890";
 
     const result = await client.addTorrent(magnet, { savePath: "/下载", label: "电影" });
@@ -239,7 +245,9 @@ describe("Tauri adapter 的下载器与备份请求契约", () => {
   });
 
   it("uTorrent 先取 token，再按固定查询参数提交 URL", async () => {
-    const client = new UTorrent({ address: "http://utorrent.test", username: "admin", password: "secret" });
+    const client = new UTorrent({ address: "http://utorrent.test", username: "admin", password: "secret" }).configure(
+      downloaderDependencies(),
+    );
     const magnet = "magnet:?xt=urn:btih:1234567890123456789012345678901234567890";
 
     await expect(client.addTorrent(magnet, { savePath: "/data" })).resolves.toMatchObject({ success: true });
@@ -260,7 +268,7 @@ describe("Tauri adapter 的下载器与备份请求契约", () => {
     const client = new GoogleDriveConstructor({
       ...googleDriveConfig,
       config: { client_id: "client+id", client_secret: "中 文", refresh_token: "refresh/token" },
-    });
+    }).configure(backupServerDependencies());
 
     await expect(client.ping()).resolves.toBe(true);
 
@@ -277,9 +285,9 @@ describe("Tauri adapter 的下载器与备份请求契约", () => {
     const client = new OwssConstructor({
       ...owssConfig,
       config: { address: "http://owss.test", authCode: "auth-code" },
-    });
+    }).configure(backupServerDependencies());
 
-    await expect(client.addFile("backup.zip", { settings: { theme: "dark" } })).resolves.toBe(true);
+    await expect(client.addFile("backup.zip", { config: { theme: "dark" } })).resolves.toBe(true);
 
     const request = findRequest("/storage/auth-code/add");
     const multipart = decodeMultipart(request);

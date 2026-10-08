@@ -45,7 +45,7 @@ export interface IBackupFileManifest {
   time: number;
   version: string;
   encryption: boolean;
-  files: Record<string, { hash: string; name: string }>;
+  files: Record<string, { hash: string; name: string; size?: number }>;
 
   [key: string]: any;
 }

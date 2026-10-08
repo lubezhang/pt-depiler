@@ -100,7 +100,7 @@ export default class PrivateSite extends BittorrentSite {
         }
       }
     } catch (e) {
-      console.debug("[diagnostic] packages/site/schemas/AbstractPrivateSite.ts:103");
+      this.ports.logger.debug("[diagnostic] packages/site/schemas/AbstractPrivateSite.ts:103");
     }
 
     return true;
@@ -113,7 +113,7 @@ export default class PrivateSite extends BittorrentSite {
   public async getUserInfoResult(lastUserInfo: Partial<IUserInfo> = {}): Promise<IUserInfo> {
     let flushUserInfo: IUserInfo = {
       status: EResultParseStatus.unknownError,
-      updateAt: +new Date(),
+      updateAt: this.ports.clock.now(),
       site: this.metadata.id,
     };
 
@@ -199,7 +199,7 @@ export default class PrivateSite extends BittorrentSite {
       flushUserInfo.status = EResultParseStatus.success;
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.error("[diagnostic] packages/site/schemas/AbstractPrivateSite.ts:202");
+        this.ports.logger.warn("[diagnostic] packages/site/schemas/AbstractPrivateSite.ts:202");
       }
 
       flushUserInfo.status = EResultParseStatus.parseError;

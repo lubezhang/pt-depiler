@@ -781,6 +781,7 @@ pub async fn ptd_fetch(
     .then(|| req.site_id.clone());
     let result = async {
         ensure_business_window(&window)?;
+        state.ensure_recovery_ready()?;
         let method_name = req.method.as_deref().unwrap_or("GET").to_ascii_uppercase();
         let method =
             Method::from_bytes(method_name.as_bytes()).map_err(|error| error.to_string())?;
@@ -1071,6 +1072,7 @@ fn import_webview_cookies(
     target_host: &str,
     state: &AppState,
 ) -> Result<usize, String> {
+    state.ensure_recovery_ready()?;
     let cookies: Vec<_> = cookies
         .into_iter()
         .filter_map(|cookie| raw_cookie_to_info(cookie, target_host))
@@ -1079,6 +1081,7 @@ fn import_webview_cookies(
         .cookie_store
         .lock()
         .map_err(|error| error.to_string())?;
+    state.ensure_recovery_ready()?;
     for cookie in &cookies {
         store_cookie_info(&mut store, cookie.clone())?;
     }
@@ -1118,6 +1121,7 @@ fn sync_closed_site_login(window: &WebviewWindow, app: &AppHandle) {
         return;
     };
     let result = (|| {
+        crate::storage::read_key(app, "metadata")?;
         let site_host = Url::parse(&site_url)
             .map_err(|error| error.to_string())?
             .host_str()
@@ -1167,6 +1171,8 @@ async fn open_site_login_inner(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    crate::storage::read_key(&app, "metadata")?;
+    state.ensure_recovery_ready()?;
     let target_url = site_url.clone();
     let site_url = Url::parse(&site_url).map_err(|error| error.to_string())?;
     let login_url = Url::parse(&login_url).map_err(|error| error.to_string())?;
@@ -1239,6 +1245,8 @@ async fn finish_site_login_inner(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<usize, String> {
+    crate::storage::read_key(&app, "metadata")?;
+    state.ensure_recovery_ready()?;
     let site_url = Url::parse(&site_url).map_err(|error| error.to_string())?;
     let site_host = site_url.host_str().ok_or("站点地址缺少主机名")?;
     let window = app
@@ -1313,7 +1321,7 @@ fn build_cookie_url(secure: bool, domain: &str, path: &str) -> Result<Url, Strin
     Url::parse(&s).map_err(|e| e.to_string())
 }
 
-fn store_cookie_info(
+pub(crate) fn store_cookie_info(
     store: &mut cookie_store::CookieStore,
     cookie: CookieInfo,
 ) -> Result<(), String> {
@@ -1362,7 +1370,7 @@ pub async fn set_cookie(
         .map_err(|error| AppErrorDto::command(&error, "set_cookie"))
 }
 
-fn cookie_owned_by_sites(cookie: &CookieInfo, hosts: &[String]) -> bool {
+pub(crate) fn cookie_owned_by_sites(cookie: &CookieInfo, hosts: &[String]) -> bool {
     let domain = cookie.domain.trim_start_matches('.');
     hosts
         .iter()
@@ -1370,7 +1378,9 @@ fn cookie_owned_by_sites(cookie: &CookieInfo, hosts: &[String]) -> bool {
 }
 
 fn set_cookie_with_state(cookie: CookieInfo, state: &AppState) -> Result<(), String> {
+    state.ensure_recovery_ready()?;
     let mut store = state.cookie_store.lock().map_err(|e| e.to_string())?;
+    state.ensure_recovery_ready()?;
     store_cookie_info(&mut store, cookie)?;
     drop(store);
     state.persist_cookies()
@@ -1379,6 +1389,7 @@ fn set_cookie_with_state(cookie: CookieInfo, state: &AppState) -> Result<(), Str
 #[cfg(test)]
 fn remove_cookie_with_state(url: String, name: String, state: &AppState) -> Result<(), String> {
     let url = Url::parse(&url).map_err(|e| e.to_string())?;
+    state.ensure_recovery_ready()?;
     let mut store = state.cookie_store.lock().map_err(|e| e.to_string())?;
     let to_remove = store
         .iter_any()
@@ -1403,6 +1414,23 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn ap_12_pending_restore_blocks_login_cookie_sync_before_memory_mutation() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::persistent_for_test(directory.path().join("cookies.v2.json"));
+        std::fs::write(directory.path().join("cookies.v2.restore.json"), b"{}").unwrap();
+        let cookie = Cookie::build(("session", "COOKIE_SENTINEL"))
+            .domain("tracker.example")
+            .path("/")
+            .build();
+        assert!(
+            import_webview_cookies(vec![cookie], "tracker.example", &state)
+                .unwrap_err()
+                .starts_with("STORAGE_RECOVERY_REQUIRED")
+        );
+        assert_eq!(state.cookie_store.lock().unwrap().iter_any().count(), 0);
+    }
 
     #[test]
     fn ap_04_only_main_window_can_use_business_commands() {
@@ -2109,7 +2137,7 @@ mod tests {
         let mut command = Command::new("/bin/sh");
         command
             .arg("-c")
-            .arg("i=0; while [ \"$i\" -lt 5000 ]; do printf x >&2; i=$((i + 1)); done; exit 7");
+            .arg("head -c 5000 /dev/zero | tr '\\000' x >&2; exit 7");
 
         let (output, stderr) =
             command_output_with_limited_stderr(&mut command, Duration::from_secs(2))

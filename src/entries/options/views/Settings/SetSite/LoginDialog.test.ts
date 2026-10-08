@@ -222,6 +222,7 @@ describe("LoginDialog 密码生命周期", () => {
     });
     const wrapper = await openDialog();
     expect(mocks.openInteractiveSiteLogin).toHaveBeenCalledWith({
+      siteId: "fixture-site",
       siteUrl: "https://tracker.example/",
       schema: "NexusPHP",
       loginPath: "",

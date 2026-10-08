@@ -32,6 +32,7 @@ pub fn run() {
         .setup(|app| {
             storage::initialize(app.handle()).map_err(std::io::Error::other)?;
             let state = AppState::load(app.handle()).map_err(std::io::Error::other)?;
+            storage::recover_at_startup(&state).map_err(std::io::Error::other)?;
             app.manage(state);
             app.manage(http_policy::HttpPolicy);
             http::write_debug_log("app_started".to_string());
@@ -53,6 +54,10 @@ pub fn run() {
             storage::merge_ext_storage_batch,
             storage::get_storage_status,
             storage::get_cache_snapshot,
+            storage::get_backup_snapshot,
+            storage::restore_backup_snapshot,
+            storage::recover_backup_restore,
+            storage::import_legacy_restore_journals,
             storage::reconcile_storage_commit,
             storage::import_download_history,
             storage::list_download_history,

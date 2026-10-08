@@ -6,6 +6,7 @@ import {
   getFaviconMetadata,
   getSite as createSiteInstance,
   NO_IMAGE,
+  type SiteDependencies,
   type ISiteUserConfig,
   type TSiteID,
   checkSiteMetadataAllow,
@@ -14,11 +15,17 @@ import {
 import { onMessage, sendMessage } from "@/messages.ts";
 import type { IMetadataPiniaStorageSchema } from "@/shared/types.ts";
 
+import { siteDependencies } from "../adapter/site.ts";
 import { logger } from "./logger.ts";
 import { ptdIndexDb } from "../adapter/indexdb.ts";
 
-export async function getSiteUserConfig(siteId: TSiteID, flush = false) {
-  const metadataStore = (await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema;
+export async function getSiteUserConfig(
+  siteId: TSiteID,
+  flush = false,
+  currentMetadata?: IMetadataPiniaStorageSchema | null,
+) {
+  const metadataStore =
+    currentMetadata ?? ((await sendMessage("getExtStorage", "metadata")) as IMetadataPiniaStorageSchema);
   const storedSiteUserConfig = metadataStore?.sites?.[siteId] ?? {};
 
   const siteMetaData = await getDefinedSiteMetadata(siteId);
@@ -54,16 +61,22 @@ onMessage("getSiteUserConfig", async ({ data: { siteId, flush } }) => await getS
 
 export async function getSiteInstance<TYPE extends "private" | "public">(
   siteId: TSiteID,
-  options: { mergeUserConfig?: boolean } = {},
+  options: { mergeUserConfig?: boolean; dependencies?: SiteDependencies } = {},
 ) {
   const { mergeUserConfig = true } = options;
   let storedSiteUserConfig: ISiteUserConfig = {};
   if (mergeUserConfig) {
-    storedSiteUserConfig = await getSiteUserConfig(siteId);
+    storedSiteUserConfig = await getSiteUserConfig(
+      siteId,
+      false,
+      options.dependencies
+        ? await options.dependencies.settings.read<IMetadataPiniaStorageSchema>("metadata", "")
+        : undefined,
+    );
   }
 
   logger({ msg: `getSiteInstance for ${siteId}`, data: storedSiteUserConfig });
-  return await createSiteInstance<TYPE>(siteId, storedSiteUserConfig);
+  return await createSiteInstance<TYPE>(siteId, storedSiteUserConfig, options.dependencies ?? siteDependencies(siteId));
 }
 
 export async function getSiteFavicon(site: TSiteID | getFaviconMetadata, flush: boolean = false): Promise<string> {
@@ -72,11 +85,14 @@ export async function getSiteFavicon(site: TSiteID | getFaviconMetadata, flush: 
   if (flush || !siteFavicon) {
     const siteInstance = await getSiteInstance(siteId);
     if (siteInstance) {
-      siteFavicon = await getFavicon({
-        id: siteId,
-        urls: uniq([siteInstance.url, ...siteInstance.metadata.urls].filter(Boolean)),
-        favicon: siteInstance.metadata.favicon,
-      });
+      siteFavicon = await getFavicon(
+        {
+          id: siteId,
+          urls: uniq([siteInstance.url, ...siteInstance.metadata.urls].filter(Boolean)),
+          favicon: siteInstance.metadata.favicon,
+        },
+        siteDependencies(siteId).http,
+      );
 
       await (await ptdIndexDb).put("favicon", siteFavicon, siteId);
     }

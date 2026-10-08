@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { downloaderDependencies } from "@/offscreen/adapter/downloader.ts";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { getDownloader, getDownloaderMetaData, type TorrentClientMetaData } from "@ptd/downloader";
@@ -63,7 +64,7 @@ const suggestFolderInput = computed({
 const isLoadingClientFolders = ref<boolean>(false);
 async function loadClientFolders() {
   isLoadingClientFolders.value = true;
-  const client = await getDownloader(clientConfig.value!);
+  const client = await getDownloader(clientConfig.value!, downloaderDependencies(clientConfig.value!.id));
   try {
     const clientPaths = await client.getClientPaths();
     for (const path of clientPaths) {
@@ -90,7 +91,7 @@ const suggestTagInput = computed({
 const isLoadingClientLabels = ref<boolean>(false);
 async function loadClientLabels() {
   isLoadingClientLabels.value = true;
-  const client = await getDownloader(clientConfig.value!);
+  const client = await getDownloader(clientConfig.value!, downloaderDependencies(clientConfig.value!.id));
   try {
     const clientLabels = await client.getClientLabels();
     for (const label of clientLabels) {

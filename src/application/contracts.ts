@@ -40,17 +40,31 @@ export function toAppError(error: unknown, fallback: ErrorCode = "INFRASTRUCTURE
 }
 
 const errorMessages: Record<ErrorCode, string> = {
-  APP_BOOTSTRAP_FAILED: "应用启动失败", COMMAND_HANDLER_MISSING: "操作暂不可用",
-  COMMAND_SERIALIZATION_INVALID: "操作参数无效", INFRASTRUCTURE_FAILURE: "操作失败",
-  VALIDATION_FAILED: "操作参数无效", STORAGE_CONFLICT: "配置已被修改，请重读后重试",
-  STORAGE_UNAVAILABLE: "存储暂不可用", HTTP_POLICY_REJECTED: "请求被网络策略拒绝",
-  HTTP_RESPONSE_TOO_LARGE: "响应超过大小限制", HTTP_REQUEST_CANCELLED: "请求已取消",
-  HTTP_TIMEOUT: "请求超时", FILE_DOWNLOAD_FAILED: "文件下载失败", IPC_INVALID_INPUT: "操作参数无效",
+  APP_BOOTSTRAP_FAILED: "应用启动失败",
+  COMMAND_HANDLER_MISSING: "操作暂不可用",
+  COMMAND_SERIALIZATION_INVALID: "操作参数无效",
+  INFRASTRUCTURE_FAILURE: "操作失败",
+  VALIDATION_FAILED: "操作参数无效",
+  STORAGE_CONFLICT: "配置已被修改，请重读后重试",
+  STORAGE_RECOVERY_REQUIRED: "恢复尚未完成，请保留恢复资料并重启；冲突需人工处理",
+  STORAGE_COMMIT_UNCERTAIN: "提交结果待核对，请重启后确认",
+  STORAGE_UNAVAILABLE: "存储暂不可用",
+  HTTP_POLICY_REJECTED: "请求被网络策略拒绝",
+  HTTP_RESPONSE_TOO_LARGE: "响应超过大小限制",
+  HTTP_REQUEST_CANCELLED: "请求已取消",
+  HTTP_TIMEOUT: "请求超时",
+  FILE_DOWNLOAD_FAILED: "文件下载失败",
+  IPC_INVALID_INPUT: "操作参数无效",
 };
 
 function isAppError(error: unknown): error is AppErrorDto {
-  return Boolean(error && typeof error === "object" && "code" in error &&
-    typeof error.code === "string" && Object.hasOwn(errorMessages, error.code));
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    Object.hasOwn(errorMessages, error.code),
+  );
 }
 
 export function createLogRecord(error: unknown, context: Omit<LogRecord, "code" | "message" | "timestamp">): LogRecord {

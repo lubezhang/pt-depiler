@@ -22,7 +22,8 @@ import "@/background/utils/alarms.ts";
 import { startStoredUserInfoRepair } from "./startup.ts";
 import { registerSchedulerListeners } from "@/background/utils/alarms.ts";
 import { repairPersistentArtifacts } from "./artifactRecovery.ts";
-import { migrateDownloadHistory } from "@/offscreen/adapter/downloadHistory.ts";
+import { invokeIpc } from "~/extends/tauri/ipc.ts";
+import { migrateDownloadHistory, importLegacyRestoreJournals } from "@/offscreen/adapter/downloadHistory.ts";
 
 let initialized = false;
 
@@ -33,6 +34,8 @@ export async function registerLegacyServices(): Promise<void> {
 }
 
 export async function startLegacyRecovery(): Promise<void> {
+  await invokeIpc("recover_backup_restore", {});
+  await importLegacyRestoreJournals();
   await migrateDownloadHistory();
   await startStoredUserInfoRepair();
   await repairPersistentArtifacts();

@@ -5,7 +5,8 @@ import { type AxiosError, type AxiosRequestConfig, type AxiosResponse } from "ax
 import { supportSocialSite } from "@ptd/social";
 
 // noinspection ES6PreferShortImport
-import { axios, isCloudflareBlocked, retrieve, sleep, store } from "../utils/adapter";
+import { isCloudflareBlocked } from "~/extends/axios/retryWhenCloudflareBlock.ts";
+import type { SiteDependencies } from "../ports.ts";
 import {
   EResultParseStatus,
   IElementQuery,
@@ -66,7 +67,20 @@ export default class BittorrentSite {
   constructor(metadata: ISiteMetadata, userConfig: ISiteUserConfig = {}) {
     this.metadata = toMerged(metadata, userConfig.merge ?? {});
     this.userConfig = userConfig;
-    console?.log("[Site]  Initialized with Metadata: ");
+  }
+
+  private dependencies?: SiteDependencies;
+
+  public configure(dependencies: SiteDependencies): this {
+    this.dependencies = dependencies;
+    return this;
+  }
+  protected get ports(): SiteDependencies {
+    if (!this.dependencies) throw new Error("SITE_DEPENDENCIES_REQUIRED");
+    return this.dependencies;
+  }
+  protected get http() {
+    return this.ports.http;
   }
 
   get name(): string {
@@ -99,19 +113,20 @@ export default class BittorrentSite {
 
   protected async sleepAction(ms: number | undefined): Promise<void> {
     if (ms && ms > 0) {
-      await sleep(ms);
+      await this.ports.clock.sleep(ms);
     }
   }
 
   protected async storeRuntimeSettings<T extends any>(key: string, value: T): Promise<T> {
     this.userConfig.runtimeSettings ??= {}; // 确保 runtimeSettings 存在
     this.userConfig.runtimeSettings[key] = value; // 更新当前实例的 runtimeSettings
-    await store(this.metadata.id, key, value); // 持久化
+    await this.ports.settings.store(this.metadata.id, key, value); // 持久化
     return value;
   }
 
   protected async retrieveRuntimeSettings<T>(key: string): Promise<T | null> {
-    return (this.userConfig.runtimeSettings?.[key] ?? (await retrieve<T>(this.metadata.id, key))) as T | null;
+    return (this.userConfig.runtimeSettings?.[key] ??
+      (await this.ports.settings.retrieve<T>(this.metadata.id, key))) as T | null;
   }
 
   public async request<T>(axiosConfig: AxiosRequestConfig, checkLogin: boolean = true): Promise<AxiosResponse<T>> {
@@ -125,7 +140,7 @@ export default class BittorrentSite {
 
     let req: AxiosResponse;
     try {
-      req = await axios.request<T>(axiosConfig);
+      req = await this.http.request<T>(axiosConfig);
 
       // 全局性的替换 span.__cf_email__
       if (axiosConfig.responseType === "document") {
@@ -174,7 +189,7 @@ export default class BittorrentSite {
    * @param searchEntry
    */
   public async getSearchResult(keywords?: string, searchEntry: ISearchEntryRequestConfig = {}): Promise<ISearchResult> {
-    console?.log("[Site]  start search with keywords:");
+    this.ports.logger.debug("site search", { siteId: this.metadata.id });
     const result: ISearchResult = {
       data: [],
       status: EResultParseStatus.unknownError,
@@ -287,7 +302,7 @@ export default class BittorrentSite {
 
     // 如果站点有搜索请求延迟，则等待一段时间
     if ((searchEntry.requestDelay ?? 0) > 0) {
-      await sleep(searchEntry.requestDelay!);
+      await this.ports.clock.sleep(searchEntry.requestDelay!);
     }
 
     console?.log("[Site]  start search with requestConfig:");
@@ -299,7 +314,7 @@ export default class BittorrentSite {
       result.status = EResultParseStatus.success;
     } catch (e) {
       if (import.meta.env.DEV) {
-        console.error("[diagnostic] packages/site/schemas/AbstractBittorrentSite.ts:302");
+        this.ports.logger.warn("[diagnostic] packages/site/schemas/AbstractBittorrentSite.ts:302");
       }
       result.status = EResultParseStatus.parseError;
 
@@ -331,7 +346,7 @@ export default class BittorrentSite {
         url = `${urlHelper.protocol}:${uri}`;
       } else if (uri.slice(0, 4) !== "http") {
         // 基于请求地址，处理 ./xxx, xxxx, /xxxx 等相对路径
-        const requestUrl = axios.getUri(requestConfig);
+        const requestUrl = this.http.getUri(requestConfig);
         url = new URL(uri, requestUrl).toString();
       }
     }
@@ -551,7 +566,7 @@ export default class BittorrentSite {
       try {
         torrents.push((await this.parseWholeTorrentFromRow({}, tr, searchConfig!)) as ITorrent);
       } catch (e) {
-        console.error("[PTD] site '' parseWholeTorrentFromRow Error:");
+        this.ports.logger.warn("[PTD] site '' parseWholeTorrentFromRow Error:");
         throw e;
       }
     }

@@ -39,6 +39,11 @@ export interface HttpRequest {
   method: HttpMethod;
   path: string;
   body?: unknown;
+  params?: unknown;
+  headers?: Record<string, string>;
+  responseType?: "arraybuffer" | "blob" | "document" | "json" | "text";
+  timeout?: number;
+  maxRedirects?: number;
 }
 
 export interface HttpResponse<T> {

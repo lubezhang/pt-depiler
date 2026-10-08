@@ -76,6 +76,36 @@ fn sync_directory(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CookieRecovery {
+    id: String,
+    before: Vec<u8>,
+    after: Vec<u8>,
+}
+
+fn load_cookie_mirror(bytes: &[u8]) -> Result<CookieStore, String> {
+    cookie_store::serde::json::load(Cursor::new(bytes))
+        .map_err(|_| "STORAGE_CORRUPT:cookie_mirror".into())
+}
+
+fn write_cookie_recovery(path: &Path, recovery: &CookieRecovery) -> Result<(), String> {
+    let parent = path.parent().ok_or("STORAGE_UNAVAILABLE:cookie_path")?;
+    fs::create_dir_all(parent).map_err(|_| "STORAGE_UNAVAILABLE:cookie_directory")?;
+    let mut temporary =
+        NamedTempFile::new_in(parent).map_err(|_| "STORAGE_UNAVAILABLE:cookie_prepare")?;
+    serde_json::to_writer(&mut temporary, recovery)
+        .map_err(|_| "STORAGE_UNAVAILABLE:cookie_prepare")?;
+    temporary
+        .flush()
+        .and_then(|_| temporary.as_file().sync_all())
+        .map_err(|_| "STORAGE_UNAVAILABLE:cookie_prepare")?;
+    temporary
+        .persist(path)
+        .map_err(|_| "STORAGE_UNAVAILABLE:cookie_prepare")?;
+    sync_directory(parent)
+}
+
 /// 全局应用状态。Cookie Store 由所有请求共享，并按 RFC 6265 的 domain/path 规则隔离。
 pub struct AppState {
     pub(crate) no_redirect_client: Client,
@@ -142,7 +172,163 @@ impl AppState {
         }
     }
 
+    pub(crate) fn ensure_recovery_ready(&self) -> Result<(), String> {
+        if let Some(persistence) = &self.persistence {
+            if persistence
+                .path
+                .with_file_name("cookies.v2.restore.json")
+                .exists()
+            {
+                return Err("STORAGE_RECOVERY_REQUIRED:cookies".into());
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn cookie_snapshot(&self) -> Result<serde_json::Value, String> {
+        self.ensure_recovery_ready()?;
+        let store = self
+            .cookie_store
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:cookie_lock")?;
+        let cookies = store
+            .iter_any()
+            .map(crate::http::cookie_to_info)
+            .collect::<Result<Vec<_>, _>>()?;
+        serde_json::to_value(cookies).map_err(|_| "STORAGE_UNAVAILABLE:cookies".into())
+    }
+
+    pub(crate) fn restore_with_cookies(
+        &self,
+        id: &str,
+        cookies: Vec<crate::http::CookieInfo>,
+        hosts: &[String],
+        mut commit: impl FnMut(bool) -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.ensure_recovery_ready()?;
+        let persistence = self
+            .persistence
+            .as_ref()
+            .ok_or("STORAGE_UNAVAILABLE:cookie_persistence")?;
+        let mut store = self
+            .cookie_store
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:cookie_lock")?;
+        let mut after = store.clone();
+        for cookie in cookies {
+            if !crate::http::cookie_owned_by_sites(&cookie, hosts)
+                || cookie.name.is_empty()
+                || cookie
+                    .name
+                    .bytes()
+                    .any(|byte| byte <= 32 || byte >= 127 || b"()<>@,;:\\\"/[]?={}".contains(&byte))
+                || cookie.value.chars().any(|character| character.is_control())
+                || cookie.path.chars().any(|character| character.is_control())
+                || !cookie.path.starts_with('/')
+                || cookie.domain.contains(['/', ':', '@'])
+                || cookie
+                    .expiration_date
+                    .is_some_and(|expiration| !expiration.is_finite())
+            {
+                return Err("STORAGE_INVALID_INPUT:restore_cookie".into());
+            }
+            crate::http::store_cookie_info(&mut after, cookie)?;
+        }
+        let mut before_bytes = Vec::new();
+        let mut after_bytes = Vec::new();
+        cookie_store::serde::json::save_incl_expired_and_nonpersistent(&store, &mut before_bytes)
+            .map_err(|_| "STORAGE_UNAVAILABLE:cookie_serialize")?;
+        cookie_store::serde::json::save_incl_expired_and_nonpersistent(&after, &mut after_bytes)
+            .map_err(|_| "STORAGE_UNAVAILABLE:cookie_serialize")?;
+        let recovery = CookieRecovery {
+            id: id.into(),
+            before: before_bytes,
+            after: after_bytes,
+        };
+        let recovery_path = persistence.path.with_file_name("cookies.v2.restore.json");
+        write_cookie_recovery(&recovery_path, &recovery)?;
+        // Keep the store lock through the JSON and Cookie commits. Failed phases
+        // retain both mirrors; startup decides from the authoritative JSON journal.
+        commit(false)?;
+        persistence.persist(&after)?;
+        *store = after;
+        commit(true)?;
+        fs::remove_file(&recovery_path).map_err(|_| "STORAGE_UNAVAILABLE:cookie_cleanup")?;
+        sync_directory(
+            recovery_path
+                .parent()
+                .ok_or("STORAGE_UNAVAILABLE:cookie_path")?,
+        )
+    }
+
+    pub(crate) fn cookie_recovery_id(&self) -> Result<Option<String>, String> {
+        let Some(persistence) = &self.persistence else {
+            return Ok(None);
+        };
+        match fs::read(persistence.path.with_file_name("cookies.v2.restore.json")) {
+            Ok(bytes) => serde_json::from_slice::<CookieRecovery>(&bytes)
+                .map(|recovery| Some(recovery.id))
+                .map_err(|_| "STORAGE_CORRUPT:cookie_recovery".into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err("STORAGE_UNAVAILABLE:cookie_recovery".into()),
+        }
+    }
+
+    pub(crate) fn recover_cookies(
+        &self,
+        id: Option<&str>,
+        required: bool,
+        forward: bool,
+        finish: impl FnOnce() -> Result<(), String>,
+    ) -> Result<(), String> {
+        let Some(persistence) = &self.persistence else {
+            return finish();
+        };
+        let path = persistence.path.with_file_name("cookies.v2.restore.json");
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if required {
+                    return Err("STORAGE_RECOVERY_REQUIRED:cookie_mirror_missing".into());
+                }
+                return finish();
+            }
+            Err(_) => return Err("STORAGE_UNAVAILABLE:cookie_recovery".into()),
+        };
+        let recovery: CookieRecovery =
+            serde_json::from_slice(&bytes).map_err(|_| "STORAGE_CORRUPT:cookie_recovery")?;
+        if id.is_some_and(|id| id != recovery.id) {
+            return Err("STORAGE_CONFLICT:cookie_recovery_id".into());
+        }
+        let before = load_cookie_mirror(&recovery.before)?;
+        let after = load_cookie_mirror(&recovery.after)?;
+        let mut store = self
+            .cookie_store
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:cookie_lock")?;
+        let canonical = |store: &CookieStore| -> Result<serde_json::Value, String> {
+            let mut cookies = store
+                .iter_any()
+                .map(crate::http::cookie_to_info)
+                .collect::<Result<Vec<_>, _>>()?;
+            cookies
+                .sort_by(|a, b| (&a.domain, &a.path, &a.name).cmp(&(&b.domain, &b.path, &b.name)));
+            serde_json::to_value(cookies).map_err(|_| "STORAGE_UNAVAILABLE:cookie_serialize".into())
+        };
+        let current = canonical(&store)?;
+        if current != canonical(&before)? && current != canonical(&after)? {
+            return Err("STORAGE_CONFLICT:cookie_manual_recovery".into());
+        }
+        let target = if forward { after } else { before };
+        persistence.persist(&target)?;
+        *store = target;
+        finish()?;
+        fs::remove_file(&path).map_err(|_| "STORAGE_UNAVAILABLE:cookie_cleanup")?;
+        sync_directory(path.parent().ok_or("STORAGE_UNAVAILABLE:cookie_path")?)
+    }
+
     pub fn persist_cookies(&self) -> Result<(), String> {
+        self.ensure_recovery_ready()?;
         let Some(persistence) = &self.persistence else {
             return Ok(());
         };
@@ -159,6 +345,7 @@ impl AppState {
         next: &[String],
         commit: impl FnOnce() -> Result<T, String>,
     ) -> Result<T, String> {
+        self.ensure_recovery_ready()?;
         let mut store = self
             .cookie_store
             .lock()
@@ -456,5 +643,57 @@ mod tests {
         for index in 0..COOKIE_COUNT {
             assert!(names.contains(&format!("session{index}")));
         }
+    }
+}
+
+#[cfg(test)]
+mod phase_c_cookie_tests {
+    use super::*;
+
+    #[test]
+    fn ap_12_cookie_conflict_preserves_both_mirrors_and_blocks_writes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("cookies.v2.json");
+        let state = AppState::persistent_for_test(path.clone());
+        let mut after = CookieStore::default();
+        after.store_response_cookies(
+            std::iter::once(cookie::Cookie::parse("session=restored; Path=/").unwrap()),
+            &url::Url::parse("https://tracker.example/").unwrap(),
+        );
+        let mut bytes = Vec::new();
+        cookie_store::serde::json::save_incl_expired_and_nonpersistent(&after, &mut bytes).unwrap();
+        let recovery_path = path.with_file_name("cookies.v2.restore.json");
+        write_cookie_recovery(
+            &recovery_path,
+            &CookieRecovery {
+                id: "restore-1".into(),
+                before: b"[]".to_vec(),
+                after: bytes,
+            },
+        )
+        .unwrap();
+        let mut concurrent = CookieStore::default();
+        concurrent.store_response_cookies(
+            std::iter::once(cookie::Cookie::parse("session=concurrent; Path=/").unwrap()),
+            &url::Url::parse("https://tracker.example/").unwrap(),
+        );
+        CookiePersistence { path: path.clone() }
+            .persist(&concurrent)
+            .unwrap();
+        drop(state);
+        let state = AppState::persistent_for_test(path.clone());
+        let original = fs::read(&path).unwrap();
+        assert!(state
+            .recover_cookies(Some("restore-1"), true, true, || panic!(
+                "conflict must not finish"
+            ))
+            .unwrap_err()
+            .starts_with("STORAGE_CONFLICT"));
+        assert_eq!(fs::read(&path).unwrap(), original);
+        assert!(recovery_path.exists());
+        assert!(state
+            .persist_cookies()
+            .unwrap_err()
+            .starts_with("STORAGE_RECOVERY_REQUIRED"));
     }
 }

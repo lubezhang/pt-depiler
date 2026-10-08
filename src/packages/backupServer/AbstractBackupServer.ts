@@ -1,3 +1,4 @@
+import type { BackupServerDependencies } from "./ports.ts";
 import { IBackupConfig, IBackupData, IBackupFileInfo, IBackupFileListOption } from "./type.ts";
 import { backupDataToJSZipBlob, decryptData, encryptData, jsZipBlobToBackupData } from "./utils.ts";
 
@@ -9,6 +10,19 @@ export default abstract class AbstractBackupServer<T extends IBackupConfig> {
 
   protected constructor(config: T) {
     this.config = config;
+  }
+
+  private dependencies?: BackupServerDependencies;
+  public configure(dependencies: BackupServerDependencies): this {
+    this.dependencies = dependencies;
+    return this;
+  }
+  protected get ports(): BackupServerDependencies {
+    if (!this.dependencies) throw new Error("BACKUP_DEPENDENCIES_REQUIRED");
+    return this.dependencies;
+  }
+  protected get http() {
+    return this.ports.http;
   }
 
   get userConfig(): T["config"] {

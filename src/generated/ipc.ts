@@ -1,6 +1,6 @@
 // Generated from Rust DTOs and command signatures. Run PTD_UPDATE_IPC_TYPES=1 cargo test ap_01_generated_contract_is_current to update.
 
-export type AppErrorCode = "APP_BOOTSTRAP_FAILED" | "COMMAND_HANDLER_MISSING" | "COMMAND_SERIALIZATION_INVALID" | "INFRASTRUCTURE_FAILURE" | "VALIDATION_FAILED" | "STORAGE_CONFLICT" | "STORAGE_UNAVAILABLE" | "HTTP_POLICY_REJECTED" | "HTTP_RESPONSE_TOO_LARGE" | "HTTP_REQUEST_CANCELLED" | "HTTP_TIMEOUT" | "FILE_DOWNLOAD_FAILED" | "IPC_INVALID_INPUT";
+export type AppErrorCode = "APP_BOOTSTRAP_FAILED" | "COMMAND_HANDLER_MISSING" | "COMMAND_SERIALIZATION_INVALID" | "INFRASTRUCTURE_FAILURE" | "VALIDATION_FAILED" | "STORAGE_CONFLICT" | "STORAGE_UNAVAILABLE" | "STORAGE_RECOVERY_REQUIRED" | "STORAGE_COMMIT_UNCERTAIN" | "HTTP_POLICY_REJECTED" | "HTTP_RESPONSE_TOO_LARGE" | "HTTP_REQUEST_CANCELLED" | "HTTP_TIMEOUT" | "FILE_DOWNLOAD_FAILED" | "IPC_INVALID_INPUT";
 export type AppErrorDto = { code: AppErrorCode, message: string, operationId: string | null, resourceId: string | null, taskId: string | null, };
 export type FetchBody = { "kind": "none" } | { "kind": "text", "data": string } | { "kind": "base64", "data": string };
 export type FetchRequest = { requestId?: string, siteId: string, url: string, method?: string, headers?: { [key: string]: string }, body: FetchBody, params?: { [key: string]: string }, 
@@ -39,6 +39,10 @@ export interface IpcCommandMap {
   merge_ext_storage_batch: { input: { base: unknown; value: unknown }; output: unknown };
   get_storage_status: { input: Record<string, never>; output: unknown };
   get_cache_snapshot: { input: Record<string, never>; output: unknown };
+  get_backup_snapshot: { input: { includeCookies: boolean }; output: unknown };
+  restore_backup_snapshot: { input: { expectedRevision: number; data: unknown; cookies?: Array<CookieInfo> | null }; output: string };
+  recover_backup_restore: { input: Record<string, never>; output: void };
+  import_legacy_restore_journals: { input: { journals: Array<unknown>; histories: Array<unknown> }; output: void };
   reconcile_storage_commit: { input: Record<string, never>; output: boolean };
   import_download_history: { input: { histories: Array<unknown> }; output: boolean };
   list_download_history: { input: Record<string, never>; output: Array<unknown> };

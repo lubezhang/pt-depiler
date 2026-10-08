@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-08",
+  "platform": "macOS arm64",
+  "baseline": "c3deef0",
+  "source": "current working tree",
+  "desktop": {
+    "command": "pnpm verify:desktop",
+    "exitCode": 0,
+    "frontendFiles": 53,
+    "frontendTests": 189,
+    "rustTests": 76,
+    "checks": [
+      "format",
+      "TypeScript",
+      "architecture",
+      "diagnostics",
+      "frontend build",
+      "Rust fmt",
+      "Clippy all-targets -D warnings",
+      "Rust tests",
+      "macOS debug build"
+    ]
+  },
+  "targetedFrontend": [
+    {
+      "command": "pnpm exec vitest run src/acceptance/ap-11.test.ts",
+      "exitCode": 0,
+      "summary": ["Test Files  1 passed (1)", "Tests  3 passed (3)"]
+    },
+    {
+      "command": "pnpm exec vitest run src/acceptance/ap-12.test.ts",
+      "exitCode": 0,
+      "summary": ["Test Files  1 passed (1)", "Tests  2 passed (2)"]
+    },
+    {
+      "command": "pnpm exec vitest run src/acceptance/ap-13.test.ts",
+      "exitCode": 0,
+      "summary": ["Test Files  1 passed (1)", "Tests  1 passed (1)"]
+    },
+    {
+      "command": "pnpm exec vitest run src/acceptance/ap-14.test.ts",
+      "exitCode": 0,
+      "summary": ["Test Files  1 passed (1)", "Tests  2 passed (2)"]
+    },
+    {
+      "command": "pnpm exec vitest run src/acceptance/ap-15.test.ts",
+      "exitCode": 0,
+      "summary": ["Test Files  1 passed (1)", "Tests  3 passed (3)"]
+    },
+    {
+      "command": "pnpm exec vitest run src/packages/backupServer/utils.test.ts src/application/backup/service.test.ts src/application/download-service/submission.test.ts src/application/backup/remote.test.ts src/application/account/service.test.ts src/entries/options/service/siteLogin.test.ts src/extends/axios/tauriWebDAVTransport.test.ts",
+      "exitCode": 0,
+      "summary": ["Test Files 7 passed (7)", "Tests 30 passed (30)"],
+      "supplement": {
+        "command": "pnpm exec vitest run src/packages/backupServer/utils.test.ts",
+        "exitCode": 0,
+        "tests": 7,
+        "note": "includes final unsafe original ZIP path regression"
+      }
+    }
+  ],
+  "targetedRust": [
+    {
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml ap_11",
+      "exitCode": 0,
+      "summary": [
+        "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 68 filtered out; finished in 0.22s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    {
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml ap_12",
+      "exitCode": 0,
+      "summary": [
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 69 filtered out; finished in 1.09s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    },
+    {
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml ap_13",
+      "exitCode": 0,
+      "summary": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 74 filtered out; finished in 0.13s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ]
+    }
+  ],
+  "gui": {
+    "command": "PTD_E2E_DATA_DIR=<temporary absolute directory> PTD_STAGE_A_GUI=1 VITE_STAGE_A_GUI=1 VITE_STAGE_C_GUI=1 pnpm tauri dev --no-watch --config <isolated port config>",
+    "exitCode": 0,
+    "evidence": "AP-C-gui.json",
+    "passed": true
+  },
+  "limits": [
+    "External service integration not tested",
+    "Full GUI upgrade, concurrent and crash recovery scenarios deferred to AP-20",
+    "项目当前仅支持 macOS；Windows/Linux 不属于验收范围"
+  ]
+}

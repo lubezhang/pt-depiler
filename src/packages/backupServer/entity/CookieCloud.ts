@@ -16,7 +16,6 @@
  */
 
 import CryptoJS from "crypto-js";
-import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig } from "axios";
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import type {
@@ -104,7 +103,7 @@ export default class CookieCloud extends AbstractBackupServer<CookieCloudConfig>
       });
     }
 
-    return axios.request<T>({
+    return this.http.request<T>({
       baseURL: this.userConfig.address,
       url,
       ...config,

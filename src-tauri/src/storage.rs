@@ -33,8 +33,7 @@ fn data_directory(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 pub fn initialize(app: &AppHandle) -> Result<(), String> {
-    let mut repository = Repository::open(&data_directory(app)?)?;
-    repository.initialize_tasks()?;
+    let repository = Repository::open(&data_directory(app)?)?;
     REPOSITORY
         .set(Mutex::new(repository))
         .map_err(|_| "STORAGE_UNAVAILABLE:already_initialized".to_string())
@@ -178,6 +177,10 @@ pub fn read_key(app: &AppHandle, key: &str) -> Result<Value, String> {
     let guard = repository()?
         .lock()
         .map_err(|_| "STORAGE_UNAVAILABLE:lock".to_string())?;
+    guard.ensure_recovery_ready()?;
+    if guard.status()["commitUncertain"] == true {
+        return Err("STORAGE_COMMIT_UNCERTAIN:read".into());
+    }
     Ok(guard.read(key))
 }
 
@@ -364,6 +367,152 @@ pub async fn get_storage_status(window: WebviewWindow) -> Result<Value, AppError
         Ok(repository.status())
     })();
     result.map_err(|error: String| AppErrorDto::command(&error, "get_storage_status"))
+}
+
+pub fn recover_at_startup(state: &AppState) -> Result<(), String> {
+    let mut repository = repository()?
+        .lock()
+        .map_err(|_| "STORAGE_UNAVAILABLE:lock")?;
+    recover_repository(&mut repository, state)?;
+    repository.initialize_tasks()
+}
+
+fn recover_repository(repository: &mut Repository, state: &AppState) -> Result<(), String> {
+    repository.reconcile()?;
+    let journal = repository.restore_journal();
+    let stage = journal["stage"].as_str();
+    if stage == Some("manualRecovery") {
+        return Err("STORAGE_RECOVERY_REQUIRED:manual".into());
+    }
+    let pending = matches!(stage, Some("prepared" | "jsonCommitted"));
+    if pending && journal["hasCookies"] == true {
+        let id = journal["id"].as_str().ok_or("STORAGE_CORRUPT:restore_id")?;
+        if let Err(error) =
+            state.recover_cookies(Some(id), true, stage == Some("jsonCommitted"), || {
+                repository.finish_restore(id, stage == Some("prepared"))
+            })
+        {
+            if error.starts_with("STORAGE_CONFLICT") {
+                repository.mark_restore_manual()?;
+            }
+            return Err(error);
+        }
+    } else {
+        // Orphan mirrors precede the prepared marker, or follow the completed one.
+        let mirror_id = state.cookie_recovery_id()?;
+        let same_restore = mirror_id.as_deref() == journal["id"].as_str();
+        state.recover_cookies(
+            None,
+            false,
+            same_restore && stage == Some("completed"),
+            || Ok(()),
+        )?;
+        repository.ensure_recovery_ready()?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn import_legacy_restore_journals(
+    journals: Vec<Value>,
+    histories: Vec<Value>,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        if window.label() != "main" {
+            return Err("STORAGE_INVALID_INPUT:legacy_restore_owner".into());
+        }
+        repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?
+            .import_legacy_restore_journals(journals, histories)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "import_legacy_restore_journals"))
+}
+
+#[tauri::command]
+pub async fn recover_backup_restore(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+) -> Result<(), AppErrorDto> {
+    let result = ensure_storage_window(&window).and_then(|_| recover_at_startup(state.inner()));
+    result.map_err(|error| AppErrorDto::command(&error, "recover_backup_restore"))
+}
+
+#[tauri::command]
+pub async fn get_backup_snapshot(
+    include_cookies: bool,
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+) -> Result<Value, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        let repository = repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?;
+        state.ensure_recovery_ready()?;
+        let mut snapshot = repository.backup_snapshot()?;
+        if include_cookies {
+            let hosts = site_hosts(Some(&snapshot["data"]["metadata"]));
+            let cookies = state.cookie_snapshot()?;
+            snapshot["data"]["cookies"] = Value::Array(
+                cookies
+                    .as_array()
+                    .ok_or("STORAGE_UNAVAILABLE:cookies")?
+                    .iter()
+                    .filter(|cookie| {
+                        serde_json::from_value::<crate::http::CookieInfo>((*cookie).clone())
+                            .is_ok_and(|cookie| crate::http::cookie_owned_by_sites(&cookie, &hosts))
+                    })
+                    .cloned()
+                    .collect(),
+            );
+        }
+        Ok(snapshot)
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "get_backup_snapshot"))
+}
+
+#[tauri::command]
+pub async fn restore_backup_snapshot(
+    expected_revision: u64,
+    data: Value,
+    cookies: Option<Vec<crate::http::CookieInfo>>,
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+) -> Result<String, AppErrorDto> {
+    let result = (|| {
+        ensure_storage_window(&window)?;
+        let mut repository = repository()?
+            .lock()
+            .map_err(|_| "STORAGE_UNAVAILABLE:lock")?;
+        let values = data
+            .as_object()
+            .ok_or("STORAGE_INVALID_INPUT:restore")?
+            .clone();
+        repository.validate_restore_backup(expected_revision, values.clone(), cookies.is_some())?;
+        if let Some(cookies) = cookies {
+            let id = repository.next_restore_id()?;
+            let metadata = values
+                .get("metadata")
+                .cloned()
+                .unwrap_or_else(|| repository.read("metadata"));
+            state.restore_with_cookies(&id, cookies, &site_hosts(Some(&metadata)), |finish| {
+                if finish {
+                    repository.finish_restore(&id, false)
+                } else {
+                    repository
+                        .restore_backup(expected_revision, values.clone(), true)
+                        .map(|_| ())
+                }
+            })?;
+            Ok(id)
+        } else {
+            repository.restore_backup(expected_revision, values, false)
+        }
+    })();
+    result.map_err(|error: String| AppErrorDto::command(&error, "restore_backup_snapshot"))
 }
 
 #[tauri::command]
@@ -791,5 +940,188 @@ mod tests {
                 .starts_with("STORAGE_CORRUPT")
         );
         assert_eq!(fs::read(&path).unwrap(), b"{not valid");
+    }
+}
+
+#[cfg(test)]
+mod phase_c_tests {
+    use super::*;
+    use crate::http::CookieInfo;
+    use serde_json::json;
+
+    fn cookie(value: &str) -> CookieInfo {
+        CookieInfo {
+            name: "session".into(),
+            value: value.into(),
+            domain: "tracker.example".into(),
+            host_only: true,
+            path: "/".into(),
+            secure: true,
+            http_only: true,
+            expiration_date: None,
+            same_site: None,
+        }
+    }
+
+    #[test]
+    fn ap_12_process_interrupt_child() {
+        let Some(directory) = std::env::var_os("PTD_C_RESTORE_DATA") else {
+            return;
+        };
+        let boundary = std::env::var("PTD_C_RESTORE_BOUNDARY").unwrap();
+        let directory = PathBuf::from(directory);
+        let state = AppState::persistent_for_test(directory.join("cookies.v2.json"));
+        let mut repo = Repository::open(&directory).unwrap();
+        repo.import_download_history(vec![]).unwrap();
+        let revision = repo.revision();
+        let id = repo.next_restore_id().unwrap();
+        let values = json!({"config":{"theme":"dark"},"downloadHistory":[{"id":1,"downloadStatus":"completed"}]}).as_object().unwrap().clone();
+        state
+            .restore_with_cookies(
+                &id,
+                vec![cookie("fixture-secret")],
+                &["tracker.example".into()],
+                |finish| {
+                    if !finish {
+                        if boundary == "cookiePrepared" {
+                            std::process::exit(86);
+                        }
+                        if boundary == "jsonPrepared" {
+                            crate::repository::fail_after_restore_prepare_for_test();
+                        }
+                        let result = repo.restore_backup(revision, values.clone(), true);
+                        if boundary == "jsonPrepared" || boundary == "jsonCommitted" {
+                            std::process::exit(86);
+                        }
+                        result?;
+                    } else {
+                        if boundary == "cookieCommitted" {
+                            std::process::exit(86);
+                        }
+                        repo.finish_restore(&id, false)?;
+                        if boundary == "completed" {
+                            std::process::exit(86);
+                        }
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn ap_12_real_process_interrupts_recover_without_duplicate_history() {
+        for boundary in [
+            "cookiePrepared",
+            "jsonPrepared",
+            "jsonCommitted",
+            "cookieCommitted",
+            "completed",
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let status = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "storage::phase_c_tests::ap_12_process_interrupt_child",
+                    "--nocapture",
+                ])
+                .env("PTD_C_RESTORE_DATA", directory.path())
+                .env("PTD_C_RESTORE_BOUNDARY", boundary)
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(86), "{boundary}");
+            let state = AppState::persistent_for_test(directory.path().join("cookies.v2.json"));
+            let mut repo = Repository::open(directory.path()).unwrap();
+            recover_repository(&mut repo, &state).unwrap();
+            recover_repository(&mut repo, &state).unwrap();
+            let committed = !matches!(boundary, "cookiePrepared" | "jsonPrepared");
+            assert_eq!(
+                repo.list_download_history().unwrap().len(),
+                usize::from(committed),
+                "{boundary}"
+            );
+            assert_eq!(
+                state.cookie_snapshot().unwrap().as_array().unwrap().len(),
+                usize::from(committed),
+                "{boundary}"
+            );
+            assert!(!directory.path().join("cookies.v2.restore.json").exists());
+        }
+    }
+
+    #[test]
+    fn ap_12_restart_converges_at_every_cookie_boundary() {
+        for boundary in [
+            "cookiePrepared",
+            "jsonCommitted",
+            "cookieCommitted",
+            "completed",
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let cookie_path = directory.path().join("cookies.v2.json");
+            let state = AppState::persistent_for_test(cookie_path.clone());
+            let mut repo = Repository::open(directory.path()).unwrap();
+            repo.import_download_history(vec![]).unwrap();
+            let revision = repo.revision();
+            let id = repo.next_restore_id().unwrap();
+            let values = json!({"config":{"theme":"dark"},"downloadHistory":[{"id":1,"downloadStatus":"completed"}]}).as_object().unwrap().clone();
+            let result = state.restore_with_cookies(
+                &id,
+                vec![cookie("secret-cookie")],
+                &["tracker.example".into()],
+                |finish| {
+                    if !finish {
+                        if boundary == "cookiePrepared" {
+                            return Err("STORAGE_UNAVAILABLE:injected".into());
+                        }
+                        repo.restore_backup(revision, values.clone(), true)?;
+                        if boundary == "jsonCommitted" {
+                            return Err("STORAGE_UNAVAILABLE:injected".into());
+                        }
+                    } else {
+                        if boundary == "cookieCommitted" {
+                            return Err("STORAGE_UNAVAILABLE:injected".into());
+                        }
+                        repo.finish_restore(&id, false)?;
+                    }
+                    Ok(())
+                },
+            );
+            assert_eq!(result.is_ok(), boundary == "completed");
+            drop(state);
+            drop(repo);
+            let state = AppState::persistent_for_test(cookie_path);
+            let mut repo = Repository::open(directory.path()).unwrap();
+            recover_repository(&mut repo, &state).unwrap();
+            recover_repository(&mut repo, &state).unwrap();
+            if boundary == "cookiePrepared" {
+                assert!(repo.read("config").is_null());
+                assert!(repo.list_download_history().unwrap().is_empty());
+                assert_eq!(state.cookie_snapshot().unwrap(), json!([]));
+            } else {
+                assert_eq!(repo.read("config")["theme"], "dark");
+                assert_eq!(repo.list_download_history().unwrap().len(), 1);
+                assert_eq!(
+                    state.cookie_snapshot().unwrap()[0]["value"],
+                    "secret-cookie"
+                );
+                assert_eq!(repo.restore_journal()["stage"], "completed");
+            }
+            assert!(!directory.path().join("cookies.v2.restore.json").exists());
+        }
+    }
+
+    #[test]
+    fn ap_12_invalid_cookie_does_not_create_journal_or_mirror() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::persistent_for_test(directory.path().join("cookies.v2.json"));
+        let result = state.restore_with_cookies(
+            "restore-1",
+            vec![cookie("secret")],
+            &["other.example".into()],
+            |_| panic!("must validate first"),
+        );
+        assert!(result.is_err());
+        assert!(!directory.path().join("cookies.v2.restore.json").exists());
     }
 }

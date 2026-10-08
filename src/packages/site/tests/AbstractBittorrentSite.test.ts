@@ -15,6 +15,7 @@ vi.mock("../utils/adapter", () => ({
 }));
 
 import PrivateSite from "../schemas/AbstractPrivateSite";
+import { InMemoryLogger } from "~/domain/ports/index.ts";
 import type { ISiteMetadata } from "../types";
 
 describe("BittorrentSite.request", () => {
@@ -37,6 +38,12 @@ describe("BittorrentSite.request", () => {
       {},
     );
 
+    site.configure({
+      http: { request: mocks.request } as never,
+      settings: { store: vi.fn(), retrieve: vi.fn(), read: vi.fn() },
+      clock: { now: () => 42, sleep: vi.fn() },
+      logger: new InMemoryLogger(),
+    });
     await expect(site.request({ url: "/", responseType: "document" })).rejects.toBe(transportError);
   });
 });

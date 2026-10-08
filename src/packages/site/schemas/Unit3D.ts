@@ -476,7 +476,7 @@ export default class Unit3D extends PrivateSite {
   public override async getUserInfoResult(lastUserInfo: Partial<IUserInfo> = {}): Promise<IUserInfo> {
     let flushUserInfo: IUserInfo = {
       status: EResultParseStatus.unknownError,
-      updateAt: +new Date(),
+      updateAt: this.ports.clock.now(),
       site: this.metadata.id,
     };
 

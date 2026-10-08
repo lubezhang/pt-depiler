@@ -1,3 +1,5 @@
+import type { BackupServerDependencies } from "./ports.ts";
+export type { BackupServerDependencies } from "./ports.ts";
 import { nanoid } from "nanoid";
 import { cloneDeep } from "es-toolkit";
 
@@ -34,11 +36,14 @@ export async function getBackupServerDefaultConfig(configType: string): Promise<
   return config;
 }
 
-export async function getBackupServer(config: IBackupConfig): Promise<AbstractBackupServer<IBackupConfig>> {
+export async function getBackupServer(
+  config: IBackupConfig,
+  dependencies: BackupServerDependencies,
+): Promise<AbstractBackupServer<IBackupConfig>> {
   const ServerClass = (await getServerModule(config.type)).default;
 
   // @ts-ignore
-  return new ServerClass(config);
+  return new ServerClass(config).configure(dependencies);
 }
 
 export function getBackupServerIcon(type: string) {

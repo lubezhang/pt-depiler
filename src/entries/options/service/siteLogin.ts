@@ -1,195 +1,29 @@
-import axios from "axios";
 import { invokeIpc } from "~/extends/tauri/ipc.ts";
-import { getSite, NeedLoginError, type TSiteID, type TSiteUrl } from "@ptd/site";
+import { getSite } from "@ptd/site";
+import { siteDependencies } from "@/offscreen/adapter/site.ts";
+import { extStorage } from "@/storage.ts";
 import { sendMessage } from "@/messages.ts";
-import {
-  buildLoginSubmissionFields,
-  findLoginForm,
-  validateLoginResponsePage,
-  type LoginForm,
-  type PreparedSiteLogin,
-} from "./siteLoginCore.ts";
-
-export type { LoginForm, PreparedSiteLogin } from "./siteLoginCore.ts";
-
-export interface SiteLoginInput {
-  siteId: TSiteID;
-  siteUrl: string;
-  schema?: string;
-  username: string;
-  password: string;
-  loginPath?: string;
-  remember: boolean;
-}
-
-export interface SiteLoginResult {
-  cookieCount: number;
-  finalUrl: string;
-}
-
-type InteractiveSiteLoginInput = Pick<SiteLoginInput, "siteId" | "siteUrl" | "schema" | "loginPath">;
-
-function getDefaultLoginPath(schema?: string): string {
-  if (schema === "Unit3D") return "/login";
-  return "/login.php";
-}
-
-function resolveUrl(path: string, siteUrl: string): string {
-  return new URL(path, siteUrl).toString();
-}
-
-function isTransientHttp400(error: unknown): boolean {
-  if (axios.isAxiosError(error)) {
-    return error.response?.status === 400;
-  }
-  return error instanceof Error && /(?:Network Error:|HTTP)\s*400(?!\d)/.test(error.message);
-}
-
-export async function openInteractiveSiteLogin(
-  input: Pick<InteractiveSiteLoginInput, "siteUrl" | "schema" | "loginPath">,
-): Promise<void> {
-  const loginUrl = resolveUrl(input.loginPath?.trim() || input.siteUrl, input.siteUrl);
-  await invokeIpc("open_site_login", { siteUrl: input.siteUrl, loginUrl });
-}
-
-export async function finishInteractiveSiteLogin(input: InteractiveSiteLoginInput): Promise<SiteLoginResult> {
-  const cookieCount = await invokeIpc("finish_site_login", { siteUrl: input.siteUrl });
-  return verifySyncedSiteLogin(input, cookieCount);
-}
-
-export async function verifySyncedSiteLogin(
-  input: Pick<InteractiveSiteLoginInput, "siteId" | "siteUrl">,
-  cookieCount: number,
-): Promise<SiteLoginResult> {
-  if (cookieCount === 0) {
-    throw new Error("没有从站点登录窗口获取到 Cookie。请完成登录后再关闭窗口。");
-  }
-  try {
-    await verifyLoggedIn(input.siteId, input.siteUrl);
-  } catch (error) {
-    if (error instanceof NeedLoginError) {
-      throw new Error("Cookie 已同步，但站点仍返回未登录状态。请重新打开登录窗口并完成全部验证步骤。");
-    }
-    throw error;
-  }
-  return { cookieCount, finalUrl: input.siteUrl };
-}
-
-export async function prepareSiteLogin(input: Pick<SiteLoginInput, "siteUrl" | "schema" | "loginPath">) {
-  const loginPageUrl = resolveUrl(input.loginPath?.trim() || getDefaultLoginPath(input.schema), input.siteUrl);
-  const requestConfig = {
-    responseType: "document",
-    validateStatus: () => true,
-  } as const;
-  let response = await axios.get<Document>(loginPageUrl, requestConfig);
-
-  // 部分站点偶发以短 400 页响应首次匿名 GET；登录页读取是幂等操作，重试一次即可避免误报。
-  if (response.status === 400) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    response = await axios.get<Document>(loginPageUrl, requestConfig);
-  }
-
-  const { data: loginPage, status } = response;
-  if (status >= 400) {
-    throw new Error(`登录页请求失败（HTTP ${status}）。请检查登录页路径或站点可用性。`);
-  }
-  const prepared = findLoginForm(loginPage, loginPageUrl);
-  return prepared;
-}
-
-export async function getCaptchaImage(prepared: PreparedSiteLogin): Promise<string | undefined> {
-  const imageUrl = prepared.captcha?.imageUrl;
-  if (!imageUrl) {
-    return;
-  }
-
-  const { data, status, headers } = await axios.get<Blob>(imageUrl, {
-    responseType: "blob",
-    validateStatus: () => true,
-  });
-  const contentType = String(headers["content-type"] ?? "");
-  if (status < 200 || status >= 300) {
-    throw new Error(`验证码图片请求失败（HTTP ${status}）。`);
-  }
-  if (!contentType.toLowerCase().startsWith("image/") || data.size === 0) {
-    throw new Error(`验证码图片响应不是有效图片（Content-Type: ${contentType || "unknown"}，大小: ${data.size}）。`);
-  }
-  return URL.createObjectURL(data);
-}
-
-export async function reportCaptchaImageRenderFailure(_prepared?: PreparedSiteLogin): Promise<void> {
-  console.error("[login] Captcha image failed to render");
-}
-
-async function getCookieCount(siteUrl: string): Promise<number> {
-  const host = new URL(siteUrl).hostname;
-  const cookies = await sendMessage("getAllCookies", { domain: host });
-  return cookies.length;
-}
-
-async function verifyLoggedIn(siteId: TSiteID, siteUrl: string): Promise<void> {
-  const site = await getSite(siteId, { url: siteUrl as TSiteUrl });
-  try {
-    await site.request({ url: "/", responseType: "document" });
-  } catch (error) {
-    if (!isTransientHttp400(error)) {
-      throw error;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    await site.request({ url: "/", responseType: "document" });
-  }
-}
-
-/**
- * Submit a site's own HTML login form through the shared Tauri HTTP client.
- * Its Set-Cookie response is therefore written into the Cookie Jar that every
- * subsequent site request already uses.
- */
-export async function loginSite(
-  input: SiteLoginInput,
-  prepared: PreparedSiteLogin,
-  captcha?: string,
-): Promise<SiteLoginResult> {
-  if (prepared.captcha && !captcha?.trim()) {
-    throw new Error("请输入图形验证码后再登录。");
-  }
-
-  const { form } = prepared;
-  const fields = buildLoginSubmissionFields(prepared, { ...input, captcha });
-
-  const requestConfig = {
-    method: form.method,
-    url: form.action,
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    responseType: "document" as const,
-    validateStatus: () => true,
-  };
-  const response =
-    form.method === "get"
-      ? await axios.request({ ...requestConfig, params: fields })
-      : await axios.request({ ...requestConfig, data: fields });
-  if (response.status >= 400) {
-    throw new Error(`站点拒绝登录请求（HTTP ${response.status}）。请检查账号密码或验证码。`);
-  }
-  const finalUrl = validateLoginResponsePage(
-    response.data,
-    String(response.request?.responseURL ?? response.config.url ?? ""),
-    input.siteUrl,
-  );
-
-  const cookieCount = await getCookieCount(input.siteUrl);
-  if (cookieCount === 0) {
-    throw new Error("登录请求未获取到 Cookie。请确认账号密码、登录地址，或改用站点的浏览器登录流程。");
-  }
-
-  try {
-    await verifyLoggedIn(input.siteId, input.siteUrl);
-  } catch (error) {
-    if (error instanceof NeedLoginError) {
-      throw new Error("站点仍返回未登录状态。请确认账号密码，或完成验证码、二次验证后再试。");
-    }
-    throw error;
-  }
-
-  return { cookieCount, finalUrl };
-}
+import { createAccountService } from "~/application/account/service.ts";
+export type { SiteLoginInput, SiteLoginResult, PreparedSiteLogin, LoginForm } from "~/application/account/service.ts";
+const service = createAccountService({
+  http: (siteId) => siteDependencies(siteId).http,
+  site: async (siteId, url) => {
+    const config = (await extStorage.getItem("metadata"))?.sites?.[siteId];
+    if (!config) throw new Error("SITE_NOT_CONFIGURED");
+    if (config.url && new URL(config.url).origin !== new URL(url).origin) throw new Error("SITE_CONFIGURATION_CHANGED");
+    return getSite(siteId, { ...config, url: (config.url ?? url) as never }, siteDependencies(siteId));
+  },
+  open: (siteUrl, loginUrl) => invokeIpc("open_site_login", { siteUrl, loginUrl }),
+  finish: (siteUrl) => invokeIpc("finish_site_login", { siteUrl }),
+  cookies: (domain) => sendMessage("getAllCookies", { domain }),
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+});
+export const {
+  openInteractiveSiteLogin,
+  finishInteractiveSiteLogin,
+  verifySyncedSiteLogin,
+  prepareSiteLogin,
+  getCaptchaImage,
+  reportCaptchaImageRenderFailure,
+  loginSite,
+} = service;

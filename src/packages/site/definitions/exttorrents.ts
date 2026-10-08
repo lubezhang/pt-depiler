@@ -240,7 +240,7 @@ export default class ExtTorrents extends BittorrentSite {
     csrfToken: string;
     isSearch?: boolean;
   }): Promise<string | null> {
-    const timestamp = Math.floor(Date.now() / 1000);
+    const timestamp = Math.floor(this.ports.clock.now() / 1000);
     const hmacToken = this.computeHMAC(id, timestamp, pageToken);
 
     const getMagnetResp = await this.request<extGetMagnetResp>({

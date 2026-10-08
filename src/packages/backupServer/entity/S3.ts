@@ -2,7 +2,6 @@
  * S3 兼容对象存储备份支持（AWS S3、MinIO、Cloudflare R2、DigitalOcean Spaces 等）
  */
 
-import { legacyBackupHttp as axios } from "~/extends/axios/resourceClient.ts";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
 import AbstractBackupServer from "../AbstractBackupServer.ts";
 import { localSort } from "../utils";
@@ -183,7 +182,7 @@ export default class S3 extends AbstractBackupServer<S3Config> {
     const authHeaders = await this.buildAuthHeaders(method, url, queryString, options.headers ?? {}, payloadHash, now);
     const finalUrl = queryString ? `${url}?${queryString}` : url;
 
-    return axios.request<T>({
+    return this.http.request<T>({
       method: method as AxiosRequestConfig["method"],
       url: finalUrl,
       headers: authHeaders,

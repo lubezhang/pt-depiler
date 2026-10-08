@@ -17,6 +17,7 @@ export * from "./types/storages/other.ts";
 export * from "./types/storages/keepUploadTask.ts";
 
 export interface IRestoreOptions {
+  includeCredentials?: boolean; // 显式恢复账号凭据，默认保留现有凭据
   fields?: TBackupFields[]; // 需要恢复的字段
   expandCookieMinutes?: number; // 是否延长 cookie 过期时间（单位：分钟），（小于0）表示不延长
   keepExistUserInfo?: boolean; // 是否保留现有的用户信息
